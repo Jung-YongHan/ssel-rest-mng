@@ -1,0 +1,57 @@
+# ==============================================================
+#  빌드 컨텍스트 제외 목록
+#  ⚠️ 시크릿(.env) 과 런타임 데이터(backend/data) 가 이미지에 들어가면
+#     이미지를 공유하는 순간 계정/영수증이 함께 유출된다. 반드시 제외.
+# ==============================================================
+
+# ── 시크릿 ────────────────────────────────────────────────────
+.env
+.env.*
+
+# ── 런타임 데이터 (DB + 영수증 이미지) ─────────────────────────
+backend/data/
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+
+# ── Python ────────────────────────────────────────────────────
+**/.venv/
+**/venv/
+**/env/
+**/__pycache__/
+**/*.py[cod]
+**/*.egg-info/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/htmlcov/
+**/.coverage
+**/.coverage.*
+
+# ── Node / Vite ───────────────────────────────────────────────
+**/node_modules/
+frontend/dist/
+frontend/dev-dist/
+frontend/.vite/
+
+# ── VCS / 에디터 / OS ─────────────────────────────────────────
+.git/
+.gitignore
+.github/
+.vscode/
+.idea/
+**/*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── 이미지에 필요 없는 문서·메타 ──────────────────────────────
+docs/
+README.md
+LICENSE
+docker-compose.yml
+**/*.log
+tmp/
+scratch/

@@ -135,6 +135,16 @@ ParsedReceipt = {
   total_amount: number|null,     // 부가세 포함 합계
   paid_at: string|null,
 }
+```
+
+> ⚠️ **서버측 주의 (와이어 형식은 하나, 파이썬 타입은 둘).**
+> 프론트는 요청·응답 모두 `ParsedReceipt` 하나로 취급하면 되지만, 백엔드는
+> `ParsedReceipt`(요청용, `paid_at` 은 naive 를 **KST 로 해석**)와
+> `ParsedReceiptOut`(응답용, `paid_at` 은 DB 의 naive UTC 를 **그대로** 직렬화)를
+> 분리해야 한다. 응답을 요청용 타입으로 만들면 이미 UTC 인 값이 KST 로 한 번 더
+> 재해석되어 **9시간 어긋난다.** (실제로 발생했던 버그 — `ParsedReceiptOut` docstring 참고)
+
+```ts
 
 ReceiptOut = {
   id: number, image_url: string,          // "/api/receipts/{id}/image"

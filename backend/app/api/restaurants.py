@@ -193,7 +193,7 @@ def update_restaurant(
         normalized = normalize_business_number(raw)
         if raw and normalized is None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="사업자등록번호는 숫자 10자리로 입력해 주세요.",
             )
         _assert_business_number_free(db, normalized, exclude_id=restaurant.id)

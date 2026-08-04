@@ -16,7 +16,7 @@ import io
 import os
 import shutil
 import tempfile
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -66,7 +66,7 @@ LOW_BALANCE_THRESHOLD = int(os.environ["LOW_BALANCE_THRESHOLD"])
 # ══════════════════════════════════════════════════════════════════
 from app.core.config import settings  # noqa: E402
 from app.core.db import Base, SessionLocal, engine  # noqa: E402
-from app.core.timeutil import utc_now  # noqa: E402
+from app.core.timeutil import to_utc_naive, utc_now  # noqa: E402
 from app.models import (  # noqa: E402
     Receipt,
     Restaurant,
@@ -361,10 +361,21 @@ def stub_ocr(monkeypatch):
     from app.services import ocr as ocr_module
 
     result_cls = getattr(ocr_module, "OcrResult", None)
+    # 계약상 OcrResult.parsed["paid_at"] 은 **naive UTC datetime** 이다 (문자열이 아니다).
+    # 테스트에서는 편의상 문자열로 적을 수 있게 여기서 변환한다.
+    parse_dt = getattr(ocr_module, "parse_datetime", None)
+
+    def _coerce_paid_at(value):
+        if value is None or isinstance(value, datetime):
+            return value
+        if parse_dt is not None:
+            return parse_dt(value)
+        return to_utc_naive(datetime.fromisoformat(str(value)))
 
     def _install(parsed: dict | None = None, *, error=None, raw=None, elapsed_ms: int = 1):
         payload = dict.fromkeys(PARSED_KEYS)
         payload.update(parsed or {})
+        payload["paid_at"] = _coerce_paid_at(payload["paid_at"])
 
         def _build():
             kwargs = {

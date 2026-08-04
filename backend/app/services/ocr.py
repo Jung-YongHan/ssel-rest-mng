@@ -94,6 +94,24 @@ GUIDED_JSON: dict[str, Any] = {
 }
 
 
+def _add_guided_json(payload: dict[str, Any]) -> None:
+    """구조화 출력(JSON 스키마 강제)을 요청 본문에 넣는다.
+
+    ⚠️ `extra_body` 로 감싸면 안 된다. 그것은 **OpenAI Python SDK** 가 최상위로
+    펼쳐주는 규약이고, 여기서는 httpx 로 본문을 직접 만들기 때문에 서버가
+    `extra_body` 키를 그냥 무시한다(= 조용히 효과 없음).
+
+    서버 구현이 갈리므로 둘 다 넣는다. 모르는 키는 무시되므로 안전하다.
+      - vLLM 확장:      guided_json
+      - OpenAI 표준:    response_format={"type": "json_schema", ...}
+    """
+    payload["guided_json"] = GUIDED_JSON
+    payload["response_format"] = {
+        "type": "json_schema",
+        "json_schema": {"name": "receipt", "schema": GUIDED_JSON, "strict": True},
+    }
+
+
 # ── 이미지 전처리 ─────────────────────────────────────────────────
 
 
@@ -269,7 +287,7 @@ class QwenVisionProvider:
             "max_tokens": 800,
         }
         if settings.ocr_use_guided_json:
-            payload["extra_body"] = {"guided_json": GUIDED_JSON}
+            _add_guided_json(payload)
         return payload
 
     def extract(self, image_path: Path) -> OcrResult:
@@ -360,7 +378,7 @@ class QwenTextProvider:
             "max_tokens": 800,
         }
         if settings.ocr_use_guided_json:
-            payload["extra_body"] = {"guided_json": GUIDED_JSON}
+            _add_guided_json(payload)
         try:
             with httpx.Client(timeout=self.vision.timeout) as client:
                 response = client.post(

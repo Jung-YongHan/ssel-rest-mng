@@ -335,7 +335,7 @@ def validate_amount(tx_type: TxType | str, amount: Any) -> int:
         value = int(amount)
     except (TypeError, ValueError):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="금액은 정수(원)로 입력해 주세요.",
         ) from None
 
@@ -343,12 +343,12 @@ def validate_amount(tx_type: TxType | str, amount: Any) -> int:
     if kind == TxType.ADJUST.value:
         if value == 0:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="정정 금액은 0이 될 수 없습니다.",
             )
     elif value <= 0:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="금액은 0보다 커야 합니다.",
         )
     return value
@@ -361,7 +361,7 @@ def _as_tx_type(tx_type: TxType | str) -> TxType:
         return TxType(str(tx_type))
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="거래 유형이 올바르지 않습니다.",
         ) from None
 
@@ -428,7 +428,7 @@ def void_transaction(
     cleaned = (reason or "").strip()
     if not cleaned:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="취소 사유를 입력해 주세요.",
         )
 
@@ -522,7 +522,7 @@ def apply_parsed_to_receipt(receipt: Receipt, parsed: Any) -> None:
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=message
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=message
         )
 
 

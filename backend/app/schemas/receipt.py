@@ -33,7 +33,10 @@ def _blank_to_none(v: str | None) -> str | None:
 
 
 class ParsedReceipt(BaseModel):
-    """OCR 이 뽑아낸 값 (사용자가 화면에서 고칠 수 있다). 못 읽은 값은 null."""
+    """**요청용** — 사용자가 화면에서 고친 값 (`ConfirmIn.parsed`).
+
+    `paid_at` 은 naive 입력을 KST 벽시계로 해석한다.
+    """
 
     store_name: str | None = Field(default=None, max_length=200)
     business_number: str | None = Field(default=None, max_length=40)
@@ -46,6 +49,22 @@ class ParsedReceipt(BaseModel):
     @classmethod
     def _clean(cls, v: str | None) -> str | None:
         return _blank_to_none(v)
+
+
+class ParsedReceiptOut(BaseModel):
+    """**응답용** — 와이어 형식은 ParsedReceipt 와 같다 (프론트는 같은 타입으로 취급).
+
+    ⚠️ 응답에는 KST 입력 변환기를 붙이면 안 된다. DB 값은 이미 naive UTC 이므로
+    입력용 타입(`KstInUtcOut`)으로 응답을 만들면 **한 번 더 KST 로 재해석되어
+    9시간 어긋난다.** 그래서 출력 전용 `UtcOut` 을 쓴다.
+    """
+
+    store_name: str | None = None
+    business_number: str | None = None
+    address: str | None = None
+    phone: str | None = None
+    total_amount: int | None = None
+    paid_at: UtcOut | None = None
 
 
 class ReceiptOut(ApiModel):
@@ -85,7 +104,7 @@ class DuplicateInfo(ApiModel):
 
 class ReceiptUploadOut(ApiModel):
     receipt: ReceiptOut
-    parsed: ParsedReceipt
+    parsed: ParsedReceiptOut  # 응답 전용 타입 — 이유는 ParsedReceiptOut docstring 참고
     match: MatchResult
     duplicate: DuplicateInfo | None = None
 
@@ -141,6 +160,7 @@ __all__ = [
     "MatchCandidate",
     "MatchResult",
     "ParsedReceipt",
+    "ParsedReceiptOut",
     "ReceiptOut",
     "ReceiptUploadOut",
 ]

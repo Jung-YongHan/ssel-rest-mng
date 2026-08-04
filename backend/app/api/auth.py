@@ -23,7 +23,7 @@ MIN_PASSWORD_LENGTH = 8
 def _check_password_length(password: str) -> None:
     if len(password) < MIN_PASSWORD_LENGTH:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"비밀번호는 {MIN_PASSWORD_LENGTH}자 이상이어야 합니다.",
         )
 

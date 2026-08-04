@@ -414,6 +414,7 @@ docker compose exec app alembic history --verbose | head -30
 | 프론트엔드 대신 JSON 안내 메시지가 보임 | 이미지에 `frontend/dist` 가 안 들어갔음. `docker compose build --no-cache` 로 재빌드 |
 | 영수증 업로드 413 | `MAX_UPLOAD_MB` 를 늘린다 (기본 15) |
 | 이미지 빌드가 `npm ci` 에서 실패 | `frontend/package-lock.json` 이 `package.json` 과 어긋남. 로컬에서 `npm install` 후 lockfile 을 커밋 |
+| 이미지 빌드가 `vue-tsc` 에서 실패 | 프론트엔드 `build` 스크립트가 타입 검사를 포함하므로 TS 에러가 있으면 빌드가 멈춘다. 로컬에서 `cd frontend && npm run build` 로 먼저 통과시킨 뒤 커밋 |
 | 디스크가 찬다 | 영수증 이미지가 쌓인 것. `docker compose exec app du -sh /app/backend/data/uploads` 로 확인 |
 | 컨테이너 상태가 `unhealthy` | `docker compose exec app python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8000/api/health').read())"` 로 직접 확인 |
 

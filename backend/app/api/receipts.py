@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -169,7 +170,7 @@ async def upload_receipt(
     # 헤더(content-length)를 믿지 않고 실제로 읽은 바이트로 판정한다
     if len(raw) > settings.max_upload_bytes:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"파일이 너무 큽니다. (최대 {settings.max_upload_mb}MB)",
         )
     if not raw:
