@@ -1,0 +1,48 @@
+# ── 비밀정보: 공개 저장소에 절대 커밋 금지 ───────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── 런타임 데이터: DB(구성원 계정) + 영수증 이미지(결제정보) ──────────
+data/
+backend/data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+
+# ── Python ────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# ── Node / Vite ───────────────────────────────────────────────────
+node_modules/
+dist/
+dist-ssr/
+frontend/dev-dist/
+*.local
+.vite/
+
+# ── 에디터 / OS ───────────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── 기타 ──────────────────────────────────────────────────────────
+*.log
+tmp/
+scratch/
