@@ -440,20 +440,25 @@ export function nowLocalInput(): string                          // "YYYY-MM-DDT
 - 모든 사용자 노출 문구는 **한국어**.
 - 금액 입력은 `<v-text-field type="number" inputmode="numeric">` + `suffix="원"`.
 - 에러는 `appStore.toast(errorMessage(e), "error")`.
-- 모바일 우선: 최대 폭 `<v-container class="pa-3" style="max-width:720px">`, 버튼은 `size="large" block`.
+- 모바일 우선: `<v-container class="flow-container pa-4">` (PC 관리 화면은 `.wide-container`),
+  주 동작 버튼은 `size="large" block`. 폭·간격·색은 [docs/DESIGN.md](DESIGN.md) 를 따른다.
 
 ### 5.7 UI 문구 표준 (일관성 필수)
 
-| 개념 | 문구 |
-|---|---|
-| 충전 | **선결제 충전** (버튼: `선결제 충전하기`) |
-| 차감 | **사용** (버튼: `잔액에서 차감하기`) |
-| 홈 CTA 1 | `📷 영수증 스캔` |
-| 홈 CTA 2 | `✏️ 영수증 없이 기록` |
-| 식당 직접 등록 | `+ 식당 직접 등록` (부제: `이미 선결제해둔 식당 추가`) |
-| 즉시사용 질문 | `이번 결제에서 바로 사용한 금액이 있나요?` |
-| 잔액 부족 배지 | `잔액 부족` |
-| void | `기록 취소` (사유 입력 필수) |
+> 시각 표현(색·아이콘·간격·컴포넌트 변형)은 **[docs/DESIGN.md](DESIGN.md)** 가 기준이며
+> 충돌 시 DESIGN.md 가 이긴다. 이 표는 **문구**만 규정한다.
+> 문구에 이모지를 붙이지 않는다 — 의미는 아이콘으로 표현한다(DESIGN.md §3).
+
+| 개념 | 문구 | 아이콘 |
+|---|---|---|
+| 충전 | **선결제 충전** (버튼: `선결제 충전하기`) | `mdi-arrow-down-circle-outline` |
+| 차감 | **사용** (버튼: `잔액에서 차감하기`) | `mdi-arrow-up-circle-outline` |
+| 홈 CTA 1 | `영수증 스캔` | `mdi-camera-outline` |
+| 홈 CTA 2 | `영수증 없이 기록` | `mdi-pencil-outline` |
+| 식당 직접 등록 | `식당 직접 등록` (부제: `이미 선결제해둔 식당 추가`) | `mdi-plus` |
+| 즉시사용 질문 | `이번 결제에서 바로 사용한 금액이 있나요?` | — |
+| 잔액 부족 배지 | `잔액 부족` (`color="warning"`) | `mdi-alert-outline` |
+| void | `기록 취소` (사유 입력 필수) | `mdi-close-circle-outline` |
 
 ---
 

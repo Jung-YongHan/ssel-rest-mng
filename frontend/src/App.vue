@@ -3,10 +3,12 @@
  * 앱 셸 — 상단 바 + (데스크톱)탭 / (모바일)하단 내비 + 전역 스낵바.
  *
  * 로그인 화면에서는 모든 크롬을 숨긴다. 페이지는 자체 스낵바/앱바를 만들지 않는다.
+ * 디자인 규약: docs/DESIGN.md — 상단 바는 브랜드 컬러로 채우지 않고
+ * 표면색 + 헤어라인으로 처리해 '문서/업무 도구' 톤을 유지한다.
  */
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useDisplay } from 'vuetify'
+import { useDisplay, useTheme } from 'vuetify'
 
 import { errorMessage } from '@/api/endpoints'
 import { useAppStore } from '@/stores/app'
@@ -14,9 +16,12 @@ import { useAuthStore } from '@/stores/auth'
 
 type NavItem = { title: string; to: string; icon: string }
 
+const THEME_KEY = 'ssel.theme'
+
 const route = useRoute()
 const router = useRouter()
 const { mdAndUp } = useDisplay()
+const theme = useTheme()
 const appStore = useAppStore()
 const auth = useAuthStore()
 
@@ -27,7 +32,7 @@ const showBottomNav = computed(() => showChrome.value && !mdAndUp.value)
 const desktopNav = computed<NavItem[]>(() => {
   const items: NavItem[] = [
     { title: '식당 목록', to: '/', icon: 'mdi-storefront-outline' },
-    { title: '원장', to: '/ledger', icon: 'mdi-book-open-variant' },
+    { title: '원장', to: '/ledger', icon: 'mdi-book-open-variant-outline' },
     { title: '통계', to: '/stats', icon: 'mdi-chart-line' },
   ]
   if (auth.isAdmin) items.push({ title: '관리', to: '/admin', icon: 'mdi-shield-account-outline' })
@@ -35,9 +40,9 @@ const desktopNav = computed<NavItem[]>(() => {
 })
 
 const mobileNav: NavItem[] = [
-  { title: '홈', to: '/', icon: 'mdi-home-outline' },
+  { title: '식당', to: '/', icon: 'mdi-storefront-outline' },
   { title: '스캔', to: '/scan', icon: 'mdi-camera-outline' },
-  { title: '원장', to: '/ledger', icon: 'mdi-book-open-variant' },
+  { title: '원장', to: '/ledger', icon: 'mdi-book-open-variant-outline' },
   { title: '통계', to: '/stats', icon: 'mdi-chart-line' },
 ]
 
@@ -55,6 +60,27 @@ function activeValue(items: NavItem[]): string | undefined {
 
 const activeTab = computed(() => activeValue(desktopNav.value))
 const activeBottom = computed(() => activeValue(mobileNav))
+
+/* ── 테마 (사용자 선택을 기억한다) ────────────────────────────────*/
+const isDark = ref(theme.global.current.value.dark)
+
+const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(THEME_KEY) : null
+if (stored === 'dark' || stored === 'light') {
+  isDark.value = stored === 'dark'
+}
+
+watch(
+  isDark,
+  (dark) => {
+    theme.change(dark ? 'dark' : 'light')
+    try {
+      localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light')
+    } catch {
+      /* 시크릿 모드 등에서 저장 실패는 무시 */
+    }
+  },
+  { immediate: true },
+)
 
 async function onLogout(): Promise<void> {
   try {
@@ -74,21 +100,30 @@ onMounted(() => {
 
 <template>
   <v-app>
-    <v-app-bar v-if="showChrome" color="primary" density="comfortable" flat>
-      <v-app-bar-title class="flex-grow-0 me-2 me-md-6">
+    <v-app-bar
+      v-if="showChrome"
+      class="app-bar--flat"
+      color="surface"
+      density="comfortable"
+      flat
+    >
+      <v-app-bar-title class="flex-grow-0 me-2 me-md-8">
         <router-link to="/" class="plain-link d-inline-flex align-center" aria-label="홈으로">
-          <v-icon icon="mdi-wallet-outline" class="me-2" />
-          <span class="font-weight-bold text-no-wrap">연구실 선결제</span>
+          <span class="brand-mark">
+            <v-icon icon="mdi-wallet-outline" size="17" />
+          </span>
+          <span class="brand-text text-no-wrap">연구실 선결제</span>
         </router-link>
       </v-app-bar-title>
 
-      <v-tabs v-if="mdAndUp" :model-value="activeTab" density="comfortable">
+      <v-tabs v-if="mdAndUp" :model-value="activeTab" density="comfortable" color="primary">
         <v-tab
           v-for="item in desktopNav"
           :key="item.to"
           :value="item.to"
           :to="item.to"
           :prepend-icon="item.icon"
+          class="text-body-2"
         >
           {{ item.title }}
         </v-tab>
@@ -96,49 +131,53 @@ onMounted(() => {
 
       <v-spacer />
 
+      <v-btn
+        :icon="isDark ? 'mdi-weather-night' : 'mdi-weather-sunny'"
+        variant="text"
+        density="comfortable"
+        :aria-label="isDark ? '밝은 테마로 전환' : '어두운 테마로 전환'"
+        @click="isDark = !isDark"
+      />
+
       <v-menu location="bottom end">
         <template #activator="{ props: menuProps }">
-          <v-btn v-bind="menuProps" variant="text" class="px-2">
+          <v-btn v-bind="menuProps" variant="text" class="px-2" density="comfortable">
             <v-icon icon="mdi-account-circle-outline" start />
-            <span class="text-truncate" style="max-width: 8rem">{{ auth.user?.name }}</span>
-            <v-icon icon="mdi-chevron-down" end />
+            <span class="text-truncate text-body-2" style="max-width: 8rem">
+              {{ auth.user?.name }}
+            </span>
+            <v-icon icon="mdi-chevron-down" end size="16" />
           </v-btn>
         </template>
 
-        <v-list density="compact" min-width="220">
-          <v-list-item
-            :title="auth.user?.name ?? ''"
-            :subtitle="auth.user?.email ?? ''"
-            prepend-icon="mdi-account-circle-outline"
-          >
-            <template #append>
-              <v-chip v-if="auth.isAdmin" size="x-small" color="primary" variant="tonal">
-                관리자
-              </v-chip>
-            </template>
-          </v-list-item>
+        <v-card min-width="248">
+          <v-list density="compact" class="py-1">
+            <v-list-item
+              :title="auth.user?.name ?? ''"
+              :subtitle="auth.user?.email ?? ''"
+              prepend-icon="mdi-account-circle-outline"
+            >
+              <template #append>
+                <v-chip v-if="auth.isAdmin" size="x-small" color="primary">관리자</v-chip>
+              </template>
+            </v-list-item>
 
-          <v-divider class="my-1" />
+            <v-divider class="my-1" />
 
-          <v-list-item
-            v-if="auth.isAdmin && !mdAndUp"
-            to="/admin"
-            prepend-icon="mdi-shield-account-outline"
-            title="사용자 관리"
-          />
-          <v-list-item
-            v-if="!mdAndUp"
-            to="/ledger"
-            prepend-icon="mdi-book-open-variant"
-            title="원장"
-          />
-          <v-list-item
-            prepend-icon="mdi-logout"
-            title="로그아웃"
-            base-color="error"
-            @click="onLogout"
-          />
-        </v-list>
+            <v-list-item
+              v-if="auth.isAdmin && !mdAndUp"
+              to="/admin"
+              prepend-icon="mdi-shield-account-outline"
+              title="사용자 관리"
+            />
+            <v-list-item
+              prepend-icon="mdi-logout"
+              title="로그아웃"
+              base-color="error"
+              @click="onLogout"
+            />
+          </v-list>
+        </v-card>
       </v-menu>
     </v-app-bar>
 
@@ -152,12 +191,14 @@ onMounted(() => {
       v-if="showBottomNav"
       :model-value="activeBottom"
       color="primary"
+      bg-color="surface"
       grow
       :mandatory="false"
+      elevation="0"
     >
       <v-btn v-for="item in mobileNav" :key="item.to" :value="item.to" :to="item.to">
-        <v-icon :icon="item.icon" />
-        <span>{{ item.title }}</span>
+        <v-icon :icon="item.icon" size="21" />
+        <span class="text-caption">{{ item.title }}</span>
       </v-btn>
     </v-bottom-navigation>
 
@@ -168,6 +209,7 @@ onMounted(() => {
       :color="appStore.snackbarColor"
       :timeout="3500"
       location="top"
+      rounded="lg"
       multi-line
     >
       <span style="white-space: pre-line">{{ appStore.snackbarMessage }}</span>
@@ -181,5 +223,24 @@ onMounted(() => {
 <style scoped>
 .safe-bottom-spacer {
   height: env(safe-area-inset-bottom);
+}
+
+/* 워드마크 앞의 작은 브랜드 사각형 — 로고 대용 */
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-inline-end: 10px;
+  border-radius: 8px;
+  background: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-primary, 255, 255, 255));
+}
+
+.brand-text {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 </style>

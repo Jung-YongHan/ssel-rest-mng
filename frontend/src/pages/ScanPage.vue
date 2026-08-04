@@ -1,6 +1,14 @@
 <script setup lang="ts">
+/**
+ * 영수증 스캔 — 5단계 플로우 (UC1/UC2/UC3).
+ *
+ * 촬영 → 인식 확인 → 식당 확인 → 처리 방식 → 완료.
+ * 화면 규약은 docs/DESIGN.md: 이모지 대신 아이콘, 카드는 헤어라인,
+ * 금액은 반드시 `won()` + `class="amount"`, 채운 버튼은 화면당 1개.
+ */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useDisplay } from 'vuetify'
 import { receiptApi, errorMessage, isInsufficientBalance } from '@/api/endpoints'
 import type {
   ConfirmIn,
@@ -15,6 +23,7 @@ import { useAppStore } from '@/stores/app'
 const router = useRouter()
 const route = useRoute()
 const appStore = useAppStore()
+const { smAndUp } = useDisplay()
 
 /* ------------------------------------------------------------------ */
 /* 로컬 유틸                                                           */
@@ -38,6 +47,19 @@ function toLocalInput(iso: string | null | undefined): string {
   )
 }
 
+/** 잔액 색 — 음수만 error, 임계값 미만은 warning, 정상은 기본 잉크색 (DESIGN §1) */
+function balanceClass(r: RestaurantSummary | null | undefined): string {
+  if (!r) return ''
+  if (r.balance < 0) return 'text-error'
+  if (r.is_low_balance) return 'text-warning'
+  return ''
+}
+
+/** 거래 유형별 금액 색 — 칩(라벨)과 함께만 쓴다 (색만으로 의미 전달 금지) */
+function txTextClass(t: string): string {
+  return `text-${txColor(t)}`
+}
+
 /* ------------------------------------------------------------------ */
 /* 단계 상태                                                           */
 /* ------------------------------------------------------------------ */
@@ -50,6 +72,17 @@ const steps = [
   { n: 5, label: '완료' },
 ]
 const step = ref(1)
+
+/** 좁은 화면용 요약 표시 */
+const currentStepLabel = computed(() => steps.find((s) => s.n === step.value)?.label ?? '')
+const progressPct = computed(() => Math.round((step.value / steps.length) * 100))
+
+/** 단계 원의 상태 (완료 / 현재 / 예정) */
+function stepState(n: number): string {
+  if (step.value > n) return 'step-item--done'
+  if (step.value === n) return 'step-item--current'
+  return 'step-item--future'
+}
 
 /* 1단계 --------------------------------------------------------------- */
 const cameraInput = ref<HTMLInputElement | null>(null)
@@ -442,31 +475,48 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <v-container class="pa-3" style="max-width: 720px">
-    <h1 class="text-h6 mb-3">영수증 스캔</h1>
+  <v-container class="flow-container pa-4">
+    <h1 class="page-title mb-4">영수증 스캔</h1>
 
-    <!-- 단계 표시 -->
-    <div class="d-flex align-start mb-4">
-      <div v-for="s in steps" :key="s.n" class="text-center flex-grow-1">
-        <v-chip
-          size="small"
-          :color="step >= s.n ? 'primary' : 'grey'"
-          :variant="step >= s.n ? 'flat' : 'outlined'"
-        >
-          {{ s.n }}
-        </v-chip>
-        <div class="text-caption mt-1" :class="step === s.n ? 'font-weight-bold' : 'text-medium-emphasis'">
-          {{ s.label }}
+    <!-- ── 진행 단계 ─────────────────────────────────────────────── -->
+    <ol v-if="smAndUp" class="step-nav mb-5" aria-label="진행 단계">
+      <li
+        v-for="s in steps"
+        :key="s.n"
+        class="step-item"
+        :class="stepState(s.n)"
+        :aria-current="step === s.n ? 'step' : undefined"
+      >
+        <div class="step-rail" aria-hidden="true">
+          <span class="step-line step-line--start" />
+          <span class="step-dot">
+            <v-icon v-if="step > s.n" icon="mdi-check" size="14" />
+            <template v-else>{{ s.n }}</template>
+          </span>
+          <span class="step-line step-line--end" />
         </div>
+        <div class="step-label field-label">{{ s.label }}</div>
+      </li>
+    </ol>
+    <div v-else class="mb-5">
+      <div class="text-body-2 font-weight-medium mb-2">
+        단계 {{ step }}/{{ steps.length }} · {{ currentStepLabel }}
       </div>
+      <v-progress-linear :model-value="progressPct" height="4" color="primary" />
     </div>
 
     <v-skeleton-loader v-if="restoring" type="card" class="mb-4" />
 
     <!-- 이미 처리된 영수증 안내 -->
-    <v-alert v-if="alreadyConsumed && step < 5" type="info" variant="tonal" class="mb-4">
+    <v-alert
+      v-if="alreadyConsumed && step < 5"
+      type="info"
+      icon="mdi-information-outline"
+      density="comfortable"
+      class="mb-4"
+    >
       <div class="font-weight-medium">이미 처리된 영수증입니다.</div>
-      <div class="text-body-2">
+      <div class="text-body-2 mt-1">
         이 영수증은 {{ dateTime(receipt?.consumed_at) }} 에 이미 기록되었습니다. 같은 영수증을 두 번
         기록하지 않도록 홈에서 확인해 주세요.
       </div>
@@ -477,24 +527,30 @@ onBeforeUnmount(() => {
 
     <!-- ============================== 1단계 : 촬영 ============================== -->
     <template v-if="step === 1">
-      <v-card variant="tonal" class="mb-4">
-        <v-card-text>
-          <div class="text-body-2">
-            식당에서 받은 영수증을 촬영하면 상호명·금액·날짜를 자동으로 읽어 드립니다.
-          </div>
-          <div v-if="!appStore.ocrEnabled" class="text-body-2 mt-2 text-warning">
-            지금은 자동 인식이 꺼져 있어 촬영 후 직접 입력해야 합니다.
-          </div>
-        </v-card-text>
-      </v-card>
+      <v-alert
+        type="info"
+        icon="mdi-information-outline"
+        density="comfortable"
+        :class="appStore.ocrEnabled ? 'mb-4' : 'mb-2'"
+      >
+        식당에서 받은 영수증을 촬영하면 상호명·금액·날짜를 자동으로 읽어 드립니다.
+      </v-alert>
 
-      <v-img
+      <div v-if="!appStore.ocrEnabled" class="d-flex align-start hint-text text-warning mb-4">
+        <v-icon icon="mdi-information-outline" size="16" class="me-1 flex-shrink-0 mt-1" />
+        <span>지금은 자동 인식이 꺼져 있어 촬영 후 직접 입력해야 합니다.</span>
+      </div>
+
+      <v-sheet
         v-if="previewUrl"
-        :src="previewUrl"
-        max-height="240"
-        class="rounded mb-4"
-        cover
-      />
+        border
+        rounded="lg"
+        color="surface-variant"
+        class="receipt-frame receipt-frame--tall mb-4"
+      >
+        <!-- VImg 기본값이 object-fit:contain — 영수증이 잘리지 않게 cover 를 쓰지 않는다 -->
+        <v-img :src="previewUrl" height="100%" alt="촬영한 영수증" />
+      </v-sheet>
 
       <input
         ref="cameraInput"
@@ -512,192 +568,301 @@ onBeforeUnmount(() => {
         @change="onFileChange"
       />
 
-      <v-btn
-        color="primary"
-        size="large"
-        block
-        class="mb-3"
-        :loading="uploading"
-        :disabled="uploading"
-        @click="pickCamera"
-      >
-        📷 영수증 촬영
-      </v-btn>
-      <v-btn
-        variant="outlined"
-        size="large"
-        block
-        class="mb-4"
-        :disabled="uploading"
-        @click="pickGallery"
-      >
-        갤러리에서 선택
-      </v-btn>
+      <div class="d-flex flex-column ga-3">
+        <v-btn
+          color="primary"
+          size="large"
+          block
+          prepend-icon="mdi-camera-outline"
+          :loading="uploading"
+          :disabled="uploading"
+          @click="pickCamera"
+        >
+          영수증 촬영
+        </v-btn>
+        <v-btn
+          variant="outlined"
+          size="large"
+          block
+          prepend-icon="mdi-image-outline"
+          :disabled="uploading"
+          @click="pickGallery"
+        >
+          갤러리에서 선택
+        </v-btn>
+      </div>
 
-      <div v-if="uploading">
-        <v-progress-linear :model-value="uploadPct" height="10" rounded color="primary" />
-        <div class="text-caption mt-2 text-center">
+      <div v-if="uploading" class="mt-4">
+        <v-progress-linear :model-value="uploadPct" color="primary" />
+        <div class="hint-text mt-2 text-center">
           업로드 {{ uploadPct }}% — 인식 중입니다. OCR 인식에 최대 1분 정도 걸릴 수 있습니다.
         </div>
       </div>
-      <div v-else class="text-caption text-medium-emphasis text-center">
+      <div v-else class="hint-text mt-4 text-center">
         OCR 인식에 최대 1분 정도 걸릴 수 있습니다.
       </div>
     </template>
 
     <!-- ========================= 2단계 : 인식 결과 확인 ========================= -->
     <template v-else-if="step === 2">
-      <v-alert v-if="ocrFailed && !manualMode" type="warning" variant="tonal" class="mb-4">
+      <v-alert
+        v-if="ocrFailed && !manualMode"
+        type="warning"
+        icon="mdi-alert-outline"
+        density="comfortable"
+        class="mb-4"
+      >
         <div class="font-weight-medium">영수증을 자동으로 읽지 못했습니다.</div>
         <div class="text-body-2 mt-1">{{ receipt?.ocr_error || '인식 결과가 없습니다.' }}</div>
-        <div class="text-body-2 mt-1">
-          아래 항목을 직접 입력해도 그대로 기록됩니다.
-        </div>
+        <div class="text-body-2 mt-1">아래 항목을 직접 입력해도 그대로 기록됩니다.</div>
         <div class="d-flex ga-2 mt-3 flex-wrap">
-          <v-btn size="small" variant="flat" color="warning" :loading="reocring" @click="retryOcr">
+          <v-btn
+            size="small"
+            variant="tonal"
+            color="warning"
+            prepend-icon="mdi-refresh"
+            :loading="reocring"
+            @click="retryOcr"
+          >
             다시 인식
           </v-btn>
-          <v-btn size="small" variant="outlined" @click="manualMode = true">직접 입력하기</v-btn>
+          <v-btn size="small" variant="outlined" prepend-icon="mdi-pencil-outline" @click="manualMode = true">
+            직접 입력하기
+          </v-btn>
         </div>
       </v-alert>
-      <v-alert v-else-if="ocrFailed" type="info" variant="tonal" class="mb-4">
+      <v-alert
+        v-else-if="ocrFailed"
+        type="info"
+        icon="mdi-pencil-outline"
+        density="comfortable"
+        class="mb-4"
+      >
         <div class="text-body-2">직접 입력 모드입니다. 영수증을 보고 아래 항목을 채워 주세요.</div>
         <div class="d-flex ga-2 mt-3">
-          <v-btn size="small" variant="outlined" :loading="reocring" @click="retryOcr">
+          <v-btn
+            size="small"
+            variant="outlined"
+            prepend-icon="mdi-refresh"
+            :loading="reocring"
+            @click="retryOcr"
+          >
             다시 인식
           </v-btn>
         </div>
       </v-alert>
 
-      <v-alert v-if="duplicate" type="warning" variant="tonal" prominent class="mb-4">
+      <v-alert
+        v-if="duplicate"
+        type="warning"
+        icon="mdi-alert-outline"
+        density="comfortable"
+        class="mb-4"
+      >
         <div class="font-weight-medium">중복일 수 있습니다</div>
         <div class="text-body-2 mt-1">{{ duplicate.message }}</div>
-        <div class="text-caption mt-1">그래도 계속 진행할 수 있습니다.</div>
+        <div class="hint-text mt-1">그래도 계속 진행할 수 있습니다.</div>
       </v-alert>
 
-      <v-row class="mb-1">
+      <v-row>
         <v-col cols="12" sm="4">
-          <v-card variant="outlined">
-            <v-img
-              :src="imageSrc"
-              max-height="180"
-              cover
-              style="cursor: pointer"
-              @click="imageDialog = true"
-            />
-            <v-card-text class="text-caption py-2 text-center">
-              눌러서 크게 보기
-            </v-card-text>
-          </v-card>
+          <v-sheet
+            border
+            rounded="lg"
+            color="surface-variant"
+            class="receipt-frame pressable"
+            role="button"
+            tabindex="0"
+            aria-label="영수증 크게 보기"
+            @click="imageDialog = true"
+            @keydown.enter="imageDialog = true"
+            @keydown.space.prevent="imageDialog = true"
+          >
+            <v-img :src="imageSrc" height="100%" alt="영수증 이미지" />
+          </v-sheet>
+          <div class="hint-text text-center mt-2">눌러서 크게 보기</div>
         </v-col>
+
         <v-col cols="12" sm="8">
-          <v-text-field
-            v-model="form.store_name"
-            label="상호명"
-            density="comfortable"
-            :error="form.store_name.trim().length === 0"
-            hint="필수 항목입니다."
-            persistent-hint
-          />
-          <v-text-field
-            v-model="form.business_number"
-            label="사업자등록번호"
-            density="comfortable"
-            class="mt-3"
-            hint="하이픈은 있어도 됩니다."
-          />
-          <v-text-field v-model="form.address" label="주소" density="comfortable" class="mt-3" />
-          <v-text-field v-model="form.phone" label="전화" density="comfortable" class="mt-3" />
-          <v-text-field
-            v-model="form.total_amount"
-            label="합계금액"
-            type="number"
-            inputmode="numeric"
-            suffix="원"
-            density="comfortable"
-            class="mt-3"
-            :error="totalAmount <= 0"
-          />
-          <div class="text-caption text-medium-emphasis mb-1 mt-3">결제일시</div>
-          <input
-            v-model="form.paid_at"
-            type="datetime-local"
-            class="pa-2 rounded"
-            style="width: 100%; border: 1px solid rgba(128, 128, 128, 0.5)"
-          />
+          <div class="d-flex flex-column ga-4">
+            <v-text-field
+              v-model="form.store_name"
+              label="상호명"
+              prepend-inner-icon="mdi-storefront-outline"
+              :error="form.store_name.trim().length === 0"
+              hint="필수 항목입니다."
+              persistent-hint
+            />
+            <v-text-field
+              v-model="form.business_number"
+              label="사업자등록번호"
+              prepend-inner-icon="mdi-card-account-details-outline"
+              hint="하이픈은 있어도 됩니다."
+            />
+            <v-text-field
+              v-model="form.address"
+              label="주소"
+              prepend-inner-icon="mdi-map-marker-outline"
+            />
+            <v-text-field
+              v-model="form.phone"
+              label="전화"
+              prepend-inner-icon="mdi-phone-outline"
+            />
+            <v-text-field
+              v-model="form.total_amount"
+              label="합계금액"
+              type="number"
+              inputmode="numeric"
+              suffix="원"
+              density="default"
+              class="amount-field"
+              prepend-inner-icon="mdi-cash"
+              :error="totalAmount <= 0"
+            />
+            <!-- naive 문자열(YYYY-MM-DDTHH:mm)을 그대로 보낸다 — 서버가 KST 로 해석 -->
+            <v-text-field
+              v-model="form.paid_at"
+              label="결제일시"
+              type="datetime-local"
+              prepend-inner-icon="mdi-calendar-clock"
+              persistent-placeholder
+            />
+          </div>
         </v-col>
       </v-row>
 
-      <div class="text-body-2 mb-3">
+      <div class="hint-text mt-4 mb-4">
         인식된 값이 영수증과 다르면 고쳐 주세요. 고친 내용은 그대로 저장됩니다.
       </div>
 
-      <v-btn color="primary" size="large" block :disabled="!step2Valid" @click="goStep3">
+      <v-btn
+        color="primary"
+        size="large"
+        block
+        append-icon="mdi-arrow-right"
+        :disabled="!step2Valid"
+        @click="goStep3"
+      >
         다음 — 식당 확인
       </v-btn>
-      <v-btn variant="text" size="large" block class="mt-2" @click="resetAll">
+      <v-btn
+        variant="text"
+        size="large"
+        block
+        class="mt-2"
+        prepend-icon="mdi-camera-outline"
+        @click="resetAll"
+      >
         다시 촬영하기
       </v-btn>
     </template>
 
     <!-- ============================ 3단계 : 식당 확인 ============================ -->
     <template v-else-if="step === 3">
-      <v-alert v-if="duplicate" type="warning" variant="tonal" prominent class="mb-4">
+      <v-alert
+        v-if="duplicate"
+        type="warning"
+        icon="mdi-alert-outline"
+        density="comfortable"
+        class="mb-4"
+      >
         <div class="font-weight-medium">중복일 수 있습니다</div>
         <div class="text-body-2 mt-1">{{ duplicate.message }}</div>
       </v-alert>
 
       <!-- 3-a. 확정 매칭 확인 -->
-      <v-card v-if="askMatched" variant="outlined" class="mb-4">
-        <v-card-title class="text-subtitle-1">
-          '{{ match?.restaurant?.name }}'이 맞나요?
-        </v-card-title>
-        <v-card-text>
-          <div class="text-h6 mb-1">
-            현재 잔액 {{ won(match?.restaurant?.balance) }}
+      <v-card v-if="askMatched" class="mb-4">
+        <div class="px-4 py-3">
+          <div class="section-title">'{{ match?.restaurant?.name }}'이 맞나요?</div>
+        </div>
+        <v-divider />
+        <div class="pa-4">
+          <div class="d-flex align-center">
+            <v-icon icon="mdi-storefront-outline" size="18" class="me-2 text-medium-emphasis" />
+            <span class="text-body-2 font-weight-medium text-truncate">
+              {{ match?.restaurant?.name }}
+            </span>
           </div>
-          <div class="text-body-2 text-medium-emphasis">
-            {{ bizNumber(match?.restaurant?.business_number) }}
+          <div class="d-flex align-center mt-2">
+            <v-icon
+              icon="mdi-card-account-details-outline"
+              size="18"
+              class="me-2 text-medium-emphasis"
+            />
+            <span class="text-body-2 text-medium-emphasis">
+              {{ bizNumber(match?.restaurant?.business_number) }}
+            </span>
           </div>
-          <div v-if="match?.restaurant?.address" class="text-body-2 text-medium-emphasis">
-            {{ match?.restaurant?.address }}
+          <div v-if="match?.restaurant?.address" class="d-flex align-center mt-2">
+            <v-icon icon="mdi-map-marker-outline" size="18" class="me-2 text-medium-emphasis" />
+            <span class="text-body-2 text-medium-emphasis text-truncate">
+              {{ match?.restaurant?.address }}
+            </span>
           </div>
-        </v-card-text>
-        <v-card-actions class="flex-column align-stretch px-4 pb-4">
+        </div>
+        <v-divider />
+        <div class="px-4 py-3 d-flex align-center justify-space-between">
+          <span class="field-label">현재 잔액</span>
+          <span class="metric-value amount" :class="balanceClass(match?.restaurant)">
+            {{ won(match?.restaurant?.balance) }}
+          </span>
+        </div>
+        <v-divider />
+        <div class="pa-4">
           <v-btn color="primary" size="large" block @click="acceptMatched">
             네, 이 식당이에요
           </v-btn>
-          <v-btn variant="outlined" size="large" block class="mt-2 ml-0" @click="rejectMatched">
+          <v-btn variant="outlined" size="large" block class="mt-2" @click="rejectMatched">
             아니에요, 다른 식당
           </v-btn>
-        </v-card-actions>
+        </div>
       </v-card>
 
       <!-- 3-b. 후보 목록 -->
       <template v-if="showCandidates">
-        <div class="text-subtitle-1 mb-2">비슷한 식당이 있어요. 어디인가요?</div>
-        <v-card variant="outlined" class="mb-3">
-          <v-list>
-            <v-list-item
+        <div class="section-title mb-2">비슷한 식당이 있어요. 어디인가요?</div>
+        <v-card class="mb-4">
+          <div class="divided">
+            <div
               v-for="c in candidates"
               :key="c.restaurant.id"
-              :active="candidateId === c.restaurant.id"
+              class="pressable pick-row px-4 py-3 d-flex align-center"
+              :class="{ 'pick-row--on': candidateId === c.restaurant.id }"
+              role="button"
+              tabindex="0"
+              :aria-pressed="candidateId === c.restaurant.id"
               @click="chooseCandidate(c.restaurant.id)"
+              @keydown.enter="chooseCandidate(c.restaurant.id)"
+              @keydown.space.prevent="chooseCandidate(c.restaurant.id)"
             >
-              <v-list-item-title class="font-weight-medium">
-                {{ c.restaurant.name }}
-              </v-list-item-title>
-              <v-list-item-subtitle>
-                잔액 {{ won(c.restaurant.balance) }} ·
-                {{ bizNumber(c.restaurant.business_number) }}
-              </v-list-item-subtitle>
-              <template #append>
-                <v-chip size="small" variant="tonal">
-                  유사도 {{ Math.round(c.score) }}
-                </v-chip>
-              </template>
-            </v-list-item>
-          </v-list>
+              <v-icon
+                :icon="
+                  candidateId === c.restaurant.id ? 'mdi-check-circle-outline' : 'mdi-circle-outline'
+                "
+                :color="candidateId === c.restaurant.id ? 'primary' : undefined"
+                :class="candidateId === c.restaurant.id ? 'me-3' : 'me-3 text-disabled'"
+                size="20"
+              />
+              <div class="flex-grow-1 min-w-0 me-3">
+                <div class="d-flex align-center">
+                  <span class="text-body-2 font-weight-medium text-truncate">
+                    {{ c.restaurant.name }}
+                  </span>
+                  <v-chip class="ms-2 flex-shrink-0">유사도 {{ Math.round(c.score) }}</v-chip>
+                </div>
+                <div class="hint-text text-truncate mt-1">
+                  {{ bizNumber(c.restaurant.business_number) }}
+                </div>
+              </div>
+              <div class="text-right flex-shrink-0">
+                <div class="field-label">잔액</div>
+                <div class="amount" :class="balanceClass(c.restaurant)">
+                  {{ won(c.restaurant.balance) }}
+                </div>
+              </div>
+            </div>
+          </div>
         </v-card>
         <v-btn
           color="primary"
@@ -709,51 +874,73 @@ onBeforeUnmount(() => {
         >
           이 식당으로 계속
         </v-btn>
-        <v-btn variant="outlined" size="large" block class="mb-4" @click="switchToNew">
+        <v-btn
+          variant="outlined"
+          size="large"
+          block
+          class="mb-4"
+          prepend-icon="mdi-store-plus-outline"
+          @click="switchToNew"
+        >
           목록에 없어요 — 새 식당으로 등록
         </v-btn>
       </template>
 
       <!-- 3-c. 새 식당 등록 -->
       <template v-if="showNewForm">
-        <v-card variant="tonal" class="mb-3">
-          <v-card-text>
-            <div class="font-weight-medium">새로 방문한 식당이네요. 등록할까요?</div>
-            <div class="text-body-2 mt-1">
-              영수증에서 읽은 정보를 채워 두었습니다. 필요하면 고쳐 주세요.
-            </div>
-          </v-card-text>
+        <v-alert
+          type="info"
+          icon="mdi-information-outline"
+          density="comfortable"
+          class="mb-4"
+        >
+          <div class="font-weight-medium">새로 방문한 식당이네요. 등록할까요?</div>
+          <div class="text-body-2 mt-1">
+            영수증에서 읽은 정보를 채워 두었습니다. 필요하면 고쳐 주세요.
+          </div>
+        </v-alert>
+
+        <v-card class="pa-4 mb-4">
+          <div class="d-flex flex-column ga-4">
+            <v-text-field
+              v-model="newRestaurant.name"
+              label="식당명"
+              prepend-inner-icon="mdi-storefront-outline"
+              :error="newRestaurant.name.trim().length === 0"
+              hint="필수 항목입니다."
+              persistent-hint
+            />
+            <v-text-field
+              v-model="newRestaurant.business_number"
+              label="사업자등록번호"
+              prepend-inner-icon="mdi-card-account-details-outline"
+              hint="다음 영수증 매칭에 사용됩니다. 모르면 비워두세요."
+              persistent-hint
+            />
+            <v-text-field
+              v-model="newRestaurant.address"
+              label="주소"
+              prepend-inner-icon="mdi-map-marker-outline"
+            />
+            <v-text-field
+              v-model="newRestaurant.phone"
+              label="전화"
+              prepend-inner-icon="mdi-phone-outline"
+            />
+            <v-textarea
+              v-model="newRestaurant.memo"
+              label="메모 (선택)"
+              rows="2"
+              prepend-inner-icon="mdi-note-text-outline"
+            />
+          </div>
         </v-card>
-        <v-text-field
-          v-model="newRestaurant.name"
-          label="식당명"
-          density="comfortable"
-          :error="newRestaurant.name.trim().length === 0"
-          hint="필수 항목입니다."
-          persistent-hint
-        />
-        <v-text-field
-          v-model="newRestaurant.business_number"
-          label="사업자등록번호"
-          density="comfortable"
-          class="mt-3"
-          hint="다음 영수증 매칭에 사용됩니다. 모르면 비워두세요."
-          persistent-hint
-        />
-        <v-text-field v-model="newRestaurant.address" label="주소" density="comfortable" class="mt-3" />
-        <v-text-field v-model="newRestaurant.phone" label="전화" density="comfortable" class="mt-3" />
-        <v-textarea
-          v-model="newRestaurant.memo"
-          label="메모 (선택)"
-          rows="2"
-          density="comfortable"
-          class="mt-3"
-        />
+
         <v-btn
           color="primary"
           size="large"
           block
-          class="mt-2"
+          append-icon="mdi-arrow-right"
           :disabled="!step3Valid"
           @click="goStep4"
         >
@@ -771,59 +958,129 @@ onBeforeUnmount(() => {
         </v-btn>
       </template>
 
-      <v-btn variant="text" size="large" block class="mt-2" @click="step = 2">
+      <v-btn variant="text" size="large" block class="mt-2" prepend-icon="mdi-arrow-left" @click="step = 2">
         이전 단계로
       </v-btn>
     </template>
 
     <!-- ============================ 4단계 : 처리 방식 ============================ -->
     <template v-else-if="step === 4">
-      <v-card variant="tonal" class="mb-4">
-        <v-card-text>
-          <div class="font-weight-medium">
-            {{ mode === 'new' ? newRestaurant.name : selected?.name }}
+      <v-card class="mb-4">
+        <div class="px-4 py-3">
+          <div class="d-flex align-center">
+            <v-icon icon="mdi-storefront-outline" size="18" class="me-2 text-medium-emphasis" />
+            <span class="text-body-2 font-weight-medium text-truncate">
+              {{ mode === 'new' ? newRestaurant.name : selected?.name }}
+            </span>
           </div>
-          <div v-if="mode === 'existing'" class="text-body-2">
-            현재 잔액 {{ won(selected?.balance) }}
+          <div v-if="mode === 'new'" class="hint-text mt-1">새로 등록되는 식당입니다.</div>
+        </div>
+        <v-divider />
+        <div class="metric-row">
+          <div v-if="mode === 'existing'" class="metric-cell">
+            <div class="field-label">현재 잔액</div>
+            <div class="metric-value amount" :class="balanceClass(selected)">
+              {{ won(selected?.balance) }}
+            </div>
           </div>
-          <div v-else class="text-body-2">새로 등록되는 식당입니다.</div>
-          <div class="text-body-2 mt-1">영수증 합계금액 {{ won(totalAmount) }}</div>
-        </v-card-text>
+          <div class="metric-cell">
+            <div class="field-label">영수증 합계금액</div>
+            <div class="metric-value amount">{{ won(totalAmount) }}</div>
+          </div>
+        </div>
       </v-card>
 
       <!-- 신규 등록: 선결제 충전만 -->
       <template v-if="mode === 'new'">
-        <div class="text-subtitle-1 mb-1">선결제 충전으로 등록합니다</div>
-        <div class="text-body-2 text-medium-emphasis mb-3">
-          식당을 새로 만들고, 이번에 미리 결제한 금액을 잔액으로 올립니다.
-        </div>
+        <v-card class="pa-4 mb-4">
+          <div class="d-flex align-start">
+            <v-icon
+              icon="mdi-arrow-down-circle-outline"
+              color="success"
+              size="22"
+              class="me-3 flex-shrink-0"
+            />
+            <div class="min-w-0">
+              <div class="section-title">선결제 충전으로 등록합니다</div>
+              <div class="hint-text mt-1">
+                식당을 새로 만들고, 이번에 미리 결제한 금액을 잔액으로 올립니다.
+              </div>
+            </div>
+          </div>
+        </v-card>
       </template>
 
       <!-- 기존 식당: 충전 / 사용 선택 -->
       <template v-else>
-        <div class="text-subtitle-1 mb-2">이 영수증은 어떤 기록인가요?</div>
-        <v-card
-          :variant="action === 'charge' ? 'flat' : 'outlined'"
-          :color="action === 'charge' ? 'success' : undefined"
-          class="mb-2"
-          @click="pickAction('charge')"
-        >
-          <v-card-text>
-            <div class="font-weight-medium">선결제 충전</div>
-            <div class="text-body-2">충전 = 이번에 미리 결제한 금액</div>
-          </v-card-text>
-        </v-card>
-        <v-card
-          :variant="action === 'use' ? 'flat' : 'outlined'"
-          :color="action === 'use' ? 'error' : undefined"
-          class="mb-4"
-          @click="pickAction('use')"
-        >
-          <v-card-text>
-            <div class="font-weight-medium">잔액에서 차감하기</div>
-            <div class="text-body-2">사용 = 선결제 잔액에서 쓴 금액</div>
-          </v-card-text>
-        </v-card>
+        <div class="section-title mb-2">이 영수증은 어떤 기록인가요?</div>
+        <v-row dense class="mb-2">
+          <v-col cols="12" sm="6">
+            <v-card
+              class="choice-card pa-4 h-100"
+              :class="action === 'charge' ? 'choice-card--on' : ''"
+              role="button"
+              tabindex="0"
+              :aria-pressed="action === 'charge'"
+              @click="pickAction('charge')"
+              @keydown.enter="pickAction('charge')"
+              @keydown.space.prevent="pickAction('charge')"
+            >
+              <div class="d-flex align-start">
+                <v-icon
+                  icon="mdi-arrow-down-circle-outline"
+                  color="success"
+                  size="22"
+                  class="me-3 flex-shrink-0"
+                />
+                <div class="min-w-0">
+                  <div class="text-body-2 font-weight-medium">선결제 충전</div>
+                  <div class="hint-text mt-1">충전 = 이번에 미리 결제한 금액</div>
+                </div>
+                <v-spacer />
+                <v-icon
+                  v-if="action === 'charge'"
+                  icon="mdi-check-circle-outline"
+                  color="primary"
+                  size="20"
+                  class="ms-2 flex-shrink-0"
+                />
+              </div>
+            </v-card>
+          </v-col>
+          <v-col cols="12" sm="6">
+            <v-card
+              class="choice-card pa-4 h-100"
+              :class="action === 'use' ? 'choice-card--on' : ''"
+              role="button"
+              tabindex="0"
+              :aria-pressed="action === 'use'"
+              @click="pickAction('use')"
+              @keydown.enter="pickAction('use')"
+              @keydown.space.prevent="pickAction('use')"
+            >
+              <div class="d-flex align-start">
+                <v-icon
+                  icon="mdi-arrow-up-circle-outline"
+                  color="error"
+                  size="22"
+                  class="me-3 flex-shrink-0"
+                />
+                <div class="min-w-0">
+                  <div class="text-body-2 font-weight-medium">잔액에서 차감하기</div>
+                  <div class="hint-text mt-1">사용 = 선결제 잔액에서 쓴 금액</div>
+                </div>
+                <v-spacer />
+                <v-icon
+                  v-if="action === 'use'"
+                  icon="mdi-check-circle-outline"
+                  color="primary"
+                  size="20"
+                  class="ms-2 flex-shrink-0"
+                />
+              </div>
+            </v-card>
+          </v-col>
+        </v-row>
       </template>
 
       <!-- 금액 입력 -->
@@ -834,7 +1091,9 @@ onBeforeUnmount(() => {
         type="number"
         inputmode="numeric"
         suffix="원"
-        density="comfortable"
+        density="default"
+        class="amount-field mt-2"
+        prepend-inner-icon="mdi-cash"
         :error="chargeInt <= 0"
       />
       <v-text-field
@@ -844,38 +1103,52 @@ onBeforeUnmount(() => {
         type="number"
         inputmode="numeric"
         suffix="원"
-        density="comfortable"
+        density="default"
+        class="amount-field mt-2"
+        prepend-inner-icon="mdi-cash"
         :error="useInt <= 0"
       />
 
       <!-- 즉시 사용 -->
       <template v-if="action !== 'use'">
-        <div class="text-subtitle-2 mt-4">이번 결제에서 바로 사용한 금액이 있나요?</div>
+        <div class="section-title mt-5">이번 결제에서 바로 사용한 금액이 있나요?</div>
+        <div class="hint-text mt-1 mb-2">
+          보통 선결제 후 일부를 바로 사용합니다. 없으면 0으로 두세요.
+        </div>
         <v-text-field
           v-model="useAmount"
           label="바로 사용한 금액"
           type="number"
           inputmode="numeric"
           suffix="원"
-          density="comfortable"
-          class="mt-2"
-          hint="보통 선결제 후 일부를 바로 사용합니다. 없으면 0으로 두세요."
-          persistent-hint
+          prepend-inner-icon="mdi-arrow-up-circle-outline"
         />
       </template>
 
-      <v-textarea v-model="memo" label="메모 (선택)" rows="2" density="comfortable" class="mt-4" />
+      <v-textarea
+        v-model="memo"
+        label="메모 (선택)"
+        rows="2"
+        class="mt-4"
+        prepend-inner-icon="mdi-note-text-outline"
+      />
 
-      <v-card variant="tonal" class="mt-2 mb-4">
-        <v-card-text class="py-3">
-          <div class="text-body-2">기록 일시 {{ form.paid_at.replace('T', ' ') }}</div>
-          <div v-if="mode === 'existing'" class="text-body-2 mt-1">
-            처리 후 예상 잔액
-            <span :class="expectedBalance < 0 ? 'text-error font-weight-bold' : 'font-weight-bold'">
+      <v-card class="mt-4 mb-4">
+        <div class="divided">
+          <div class="px-4 py-3 d-flex align-center justify-space-between ga-3">
+            <span class="field-label">기록 일시</span>
+            <span class="text-body-2 amount">{{ form.paid_at.replace('T', ' ') }}</span>
+          </div>
+          <div
+            v-if="mode === 'existing'"
+            class="px-4 py-3 d-flex align-center justify-space-between ga-3"
+          >
+            <span class="field-label">처리 후 예상 잔액</span>
+            <span class="metric-value amount" :class="expectedBalance < 0 ? 'text-error' : ''">
               {{ won(expectedBalance) }}
             </span>
           </div>
-        </v-card-text>
+        </div>
       </v-card>
 
       <v-btn
@@ -888,67 +1161,98 @@ onBeforeUnmount(() => {
       >
         기록 저장하기
       </v-btn>
-      <v-btn variant="text" size="large" block class="mt-2" :disabled="submitting" @click="step = 3">
+      <v-btn
+        variant="text"
+        size="large"
+        block
+        class="mt-2"
+        prepend-icon="mdi-arrow-left"
+        :disabled="submitting"
+        @click="step = 3"
+      >
         이전 단계로
       </v-btn>
     </template>
 
     <!-- ============================== 5단계 : 완료 ============================== -->
     <template v-else-if="step === 5 && result">
-      <v-card color="success" variant="tonal" class="mb-4">
-        <v-card-text>
-          <div class="text-h6">✅ 기록을 저장했습니다</div>
-          <div class="text-subtitle-1 mt-1">{{ result.restaurant.name }}</div>
-        </v-card-text>
-      </v-card>
-
-      <v-card variant="outlined" class="mb-4">
-        <v-card-text>
-          <div class="text-subtitle-2 mb-2">기록된 내용</div>
+      <v-card class="mb-4">
+        <div class="pa-4 d-flex align-start">
+          <v-icon
+            icon="mdi-check-circle-outline"
+            color="success"
+            size="28"
+            class="me-3 flex-shrink-0"
+          />
+          <div class="min-w-0">
+            <div class="section-title">기록을 저장했습니다</div>
+            <div class="text-body-2 mt-1 text-truncate">{{ result.restaurant.name }}</div>
+          </div>
+        </div>
+        <v-divider />
+        <div class="px-4 pt-3">
+          <div class="field-label">기록된 내용</div>
+        </div>
+        <div class="divided mt-1">
           <div
             v-for="t in result.transactions"
             :key="t.id"
-            class="d-flex align-center justify-space-between py-1"
+            class="px-4 py-3 d-flex align-center justify-space-between ga-3"
           >
-            <v-chip size="small" :color="txColor(t.type)" variant="flat">
-              {{ txLabel(t.type) }}
-            </v-chip>
-            <div class="font-weight-medium">{{ won(t.amount) }}</div>
+            <v-chip :color="txColor(t.type)">{{ txLabel(t.type) }}</v-chip>
+            <span class="amount" :class="txTextClass(t.type)">{{ won(t.amount) }}</span>
           </div>
-          <v-divider class="my-3" />
-          <div class="d-flex align-center justify-space-between">
-            <span class="text-body-2">이전 잔액</span>
-            <span>{{ won(result.balance_before) }}</span>
-          </div>
-          <div class="d-flex align-center justify-space-between mt-1">
-            <span class="text-body-2">새 잔액</span>
+        </div>
+        <v-divider />
+        <div class="px-4 py-3">
+          <div class="field-label">이전 잔액 → 새 잔액</div>
+          <div class="d-flex align-center mt-1">
+            <span class="amount text-medium-emphasis">{{ won(result.balance_before) }}</span>
+            <v-icon
+              icon="mdi-arrow-right"
+              size="16"
+              class="mx-2 text-medium-emphasis flex-shrink-0"
+            />
             <span
-              class="text-h6"
-              :class="result.balance_after < 0 ? 'text-error' : 'text-primary'"
+              class="metric-value amount"
+              :class="result.balance_after < 0 ? 'text-error' : ''"
             >
               {{ won(result.balance_after) }}
             </span>
           </div>
-          <div class="text-caption text-medium-emphasis mt-2">
-            {{ won(result.balance_before) }} → {{ won(result.balance_after) }}
-          </div>
-        </v-card-text>
+        </div>
       </v-card>
 
       <v-alert
         v-for="(w, i) in result.warnings"
         :key="i"
         type="warning"
-        variant="tonal"
+        icon="mdi-alert-outline"
+        density="comfortable"
         class="mb-3"
       >
         {{ w }}
       </v-alert>
 
-      <v-btn color="primary" size="large" block class="mb-2" @click="goDetail">
+      <v-btn
+        color="primary"
+        size="large"
+        block
+        class="mb-2"
+        append-icon="mdi-arrow-right"
+        @click="goDetail"
+      >
         식당 상세 보기
       </v-btn>
-      <v-btn variant="outlined" size="large" block class="mb-2" @click="resetAll">
+      <v-btn
+        color="primary"
+        variant="tonal"
+        size="large"
+        block
+        class="mb-2"
+        prepend-icon="mdi-camera-outline"
+        @click="resetAll"
+      >
         영수증 하나 더 스캔
       </v-btn>
       <v-btn variant="text" size="large" block @click="goHome">홈으로</v-btn>
@@ -957,7 +1261,10 @@ onBeforeUnmount(() => {
     <!-- 잔액 부족 확인 -->
     <v-dialog v-model="negDialog" max-width="420">
       <v-card>
-        <v-card-title class="text-subtitle-1">잔액이 부족합니다</v-card-title>
+        <v-card-title class="d-flex align-center">
+          <v-icon icon="mdi-alert-outline" color="warning" size="20" class="me-2" />
+          <span class="section-title">잔액이 부족합니다</span>
+        </v-card-title>
         <v-card-text>
           <div class="text-body-2">{{ negMessage }}</div>
           <div class="text-body-2 mt-2">
@@ -967,7 +1274,7 @@ onBeforeUnmount(() => {
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="negDialog = false">취소</v-btn>
-          <v-btn color="error" variant="flat" @click="proceedNegative">계속하기</v-btn>
+          <v-btn color="error" variant="tonal" @click="proceedNegative">계속하기</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -975,7 +1282,7 @@ onBeforeUnmount(() => {
     <!-- 영수증 크게 보기 -->
     <v-dialog v-model="imageDialog" max-width="640">
       <v-card>
-        <v-img :src="imageSrc" max-height="80vh" contain />
+        <v-img :src="imageSrc" max-height="80vh" alt="영수증 이미지" />
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="imageDialog = false">닫기</v-btn>
@@ -984,3 +1291,142 @@ onBeforeUnmount(() => {
     </v-dialog>
   </v-container>
 </template>
+
+<style scoped>
+/* ── 진행 단계 표시 ────────────────────────────────────────────────
+   완료=체크(브랜드 채움) / 현재=번호(브랜드 채움) / 예정=헤어라인 원.
+   색은 테마 토큰만 사용한다. */
+.step-nav {
+  display: flex;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.step-item {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.step-rail {
+  display: flex;
+  align-items: center;
+}
+
+.step-line {
+  flex: 1 1 auto;
+  height: 1px;
+  background-color: rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.step-item:first-child .step-line--start,
+.step-item:last-child .step-line--end {
+  visibility: hidden;
+}
+
+.step-item--done .step-line,
+.step-item--current .step-line--start {
+  background-color: rgba(var(--v-theme-primary), 0.4);
+}
+
+.step-dot {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background-color: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface-variant));
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.step-item--done .step-dot,
+.step-item--current .step-dot {
+  border-color: rgb(var(--v-theme-primary));
+  background-color: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-primary, 255, 255, 255));
+}
+
+.step-item--future .step-dot {
+  opacity: 0.55;
+}
+
+.step-label {
+  margin-top: var(--sp-2);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step-item--current .step-label {
+  color: rgb(var(--v-theme-on-surface));
+  font-weight: 700;
+}
+
+.step-item--future .step-label {
+  opacity: 0.6;
+}
+
+/* ── 영수증 이미지 틀 ─────────────────────────────────────────────*/
+.receipt-frame {
+  height: 176px;
+  overflow: hidden;
+}
+
+.receipt-frame--tall {
+  height: 240px;
+}
+
+/* ── 선택 카드 / 선택 행 ─────────────────────────────────────────
+   선택 상태 = 브랜드 테두리 + 톤 배경. `:hover` 보다 우선하도록 함께 선언한다.
+   비선택 테두리는 헤어라인 토큰으로 고정해 선택 상태가 확실히 도드라지게 한다
+   (Vuetify 의 outlined 는 border-color 가 currentColor 라서 잉크색으로 나온다). */
+.choice-card {
+  border-color: rgba(var(--v-border-color), var(--v-border-opacity));
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.choice-card:hover {
+  background-color: rgba(var(--v-theme-on-surface), 0.03);
+}
+
+.choice-card:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
+}
+
+.choice-card--on,
+.choice-card--on:hover {
+  border-color: rgb(var(--v-theme-primary));
+  background-color: rgba(var(--v-theme-primary), 0.08);
+}
+
+.pick-row--on,
+.pick-row--on:hover {
+  background-color: rgba(var(--v-theme-primary), 0.08);
+}
+
+/* ── 보조 ────────────────────────────────────────────────────────*/
+/* flex 안에서 text-truncate 가 동작하려면 min-width 를 풀어줘야 한다 */
+.min-w-0 {
+  min-width: 0;
+}
+
+/* 합계/충전 금액은 이 화면의 대표 숫자 — 입력칸에서도 크게 보인다 */
+.amount-field :deep(input) {
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+</style>

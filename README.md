@@ -67,6 +67,7 @@ OCR 은 입력을 편하게 해주는 보조 장치이지, 앱의 필수 부품�
 | DB | SQLite (기본, 파일 하나) / PostgreSQL 전환 가능 |
 | 인증 | JWT(PyJWT) + httpOnly 쿠키 · bcrypt |
 | 프론트엔드 | Vue 3 · Vite · Vuetify 3 · Pinia · vue-router · axios |
+| 디자인 | 자체 디자인 시스템 ([docs/DESIGN.md](docs/DESIGN.md)) · Pretendard 본문 폰트 · Material Design Icons |
 | 영수증 OCR | 자체 호스팅 Qwen 비전 모델 (OpenAI 호환 API) · Pillow 전처리 |
 | 상호명 매칭 | 사업자등록번호 정확일치 + rapidfuzz 퍼지 매칭 |
 | 배포 | Docker 멀티스테이지 단일 이미지 · docker compose |
@@ -391,7 +392,13 @@ balance = Σ(CHARGE) − Σ(USE) + Σ(ADJUST)      (voided_at IS NULL 인 거래
 
 ## 라이선스
 
-MIT License
+이 프로젝트는 MIT License 입니다. 함께 배포되는 서드파티 리소스의 라이선스는 각각 다음과 같습니다.
+
+| 리소스 | 라이선스 |
+|---|---|
+| [Pretendard](https://github.com/orioncactus/pretendard) (본문 폰트, `@fontsource/pretendard`) | SIL Open Font License 1.1 |
+| [Material Design Icons](https://pictogrammers.com/library/mdi/) (`@mdi/font`) | Apache License 2.0 |
+| Vue · Vuetify · FastAPI · SQLAlchemy 등 | 각 프로젝트의 MIT / Apache-2.0 |
 
 ```
 Copyright (c) 2026 ssel-rest-mng contributors

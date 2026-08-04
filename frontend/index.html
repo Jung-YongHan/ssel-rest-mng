@@ -6,7 +6,11 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#3F51B5" />
+    <!-- 브랜드 색: main.ts 의 primary / vite.config.ts 의 THEME_COLOR 와 동일하게 유지 -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#234E9E" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0E1116" />
+    <!-- 스크롤바·기본 폼 컨트롤이 다크 테마를 따라가게 한다 -->
+    <meta name="color-scheme" content="light dark" />
     <meta name="description" content="연구실 식당 선결제 잔액을 기록하고 관리합니다." />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,9 +20,68 @@
     <link rel="icon" type="image/png" href="/pwa-192x192.png" sizes="192x192" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>연구실 선결제 관리</title>
+
+    <!--
+      번들·폰트를 받는 동안 흰 화면이 보이지 않도록 하는 인라인 스플래시.
+      #app 안에 두었으므로 Vue 가 마운트되는 순간 통째로 교체된다.
+      색은 main.ts 의 테마 토큰과 같은 값을 손으로 맞춘 것이다.
+    -->
+    <style>
+      :root {
+        --splash-bg: #f5f6f8;
+        --splash-brand: #234e9e;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --splash-bg: #0e1116;
+          --splash-brand: #8fb3f2;
+        }
+      }
+      html,
+      body {
+        margin: 0;
+        background: var(--splash-bg);
+      }
+      #app-splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--splash-bg);
+      }
+      #app-splash .mark {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: var(--splash-brand);
+        opacity: 0;
+        animation: splash-in 0.9s ease-out 0.25s forwards;
+      }
+      @keyframes splash-in {
+        from {
+          opacity: 0;
+          transform: scale(0.94);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #app-splash .mark {
+          animation: none;
+          opacity: 1;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div id="app-splash" role="status" aria-label="불러오는 중">
+        <div class="mark"></div>
+      </div>
+    </div>
     <noscript>이 앱을 사용하려면 자바스크립트를 켜주세요.</noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>

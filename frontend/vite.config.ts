@@ -5,8 +5,8 @@ import vue from '@vitejs/plugin-vue'
 import vuetify from 'vite-plugin-vuetify'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// 테마 색(인디고) — index.html / PWA manifest / Vuetify 테마와 동일하게 유지한다.
-const THEME_COLOR = '#3F51B5'
+// 브랜드 색 — index.html / PWA manifest / main.ts 의 primary 와 동일하게 유지한다.
+const THEME_COLOR = '#234E9E'
 
 export default defineConfig({
   plugins: [
@@ -40,11 +40,24 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,ttf,eot}'],
+        // 본문 폰트(Pretendard)는 웨이트당 ~750KB 라 프리캐시에 넣으면 설치가 무거워진다.
+        // 서비스워커는 첫 화면에 필요한 것만 미리 받고, 폰트는 런타임 캐시에 맡긴다.
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         cleanupOutdatedCaches: true,
         navigateFallback: 'index.html',
         // API 응답은 절대 캐시/오프라인 셸로 대체하지 않는다.
         navigateFallbackDenylist: [/^\/api/],
+        runtimeCaching: [
+          {
+            urlPattern: ({ request }) => request.destination === 'font',
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'ssel-fonts',
+              expiration: { maxEntries: 12, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
       devOptions: { enabled: false },
     }),
