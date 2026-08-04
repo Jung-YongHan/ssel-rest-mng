@@ -3,6 +3,16 @@
 연구실이 식당에 미리 돈을 맡겨두고(**선결제**) 그 잔액을 나눠 쓰는 방식을,
 영수증 사진 한 장으로 관리하는 모바일 우선 웹앱입니다.
 
+### 문서 안내
+
+| 문서 | 내용 |
+|---|---|
+| **[docs/HANDOFF.md](docs/HANDOFF.md)** | **프로젝트를 넘겨받았다면 여기서 시작하세요** — 현재 상태·검증 현황·미해결 항목·다음 할 일 |
+| [CLAUDE.md](CLAUDE.md) | 개발 사양 — 명령어, 지켜야 할 불변식, 컨벤션 |
+| [docs/CONTRACT.md](docs/CONTRACT.md) | API·스키마·타입·프론트 모듈 계약 |
+| [docs/DESIGN.md](docs/DESIGN.md) | 디자인 시스템 (색·타이포·아이콘·컴포넌트) |
+| [docs/DEPLOY.md](docs/DEPLOY.md) | 원격 서버 배포·백업·HTTPS·트러블슈팅 |
+
 ---
 
 ## 프로젝트 소개
