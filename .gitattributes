@@ -1,0 +1,25 @@
+# 기본: 텍스트 파일은 저장소에 LF 로 저장
+* text=auto eol=lf
+
+# Linux 컨테이너에서 실행되는 파일은 반드시 LF (CRLF 면 "no such file or directory" 로 깨진다)
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.Dockerfile    text eol=lf
+docker-compose*.yml text eol=lf
+*.mako          text eol=lf
+
+# Windows 전용 스크립트는 CRLF 유지
+*.bat           text eol=crlf
+*.ps1           text eol=crlf
+*.cmd           text eol=crlf
+
+# 바이너리 (줄바꿈 변환 금지)
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.ico           binary
+*.woff          binary
+*.woff2         binary
+*.ttf           binary
+*.db            binary
+*.pdf           binary
