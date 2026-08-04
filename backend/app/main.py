@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +23,23 @@ logging.basicConfig(
 )
 log = logging.getLogger("ssel")
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    settings.ensure_dirs()
+    log.info("DB: %s", settings.sqlalchemy_url)
+    if settings.ocr_enabled:
+        log.info("OCR: provider=%s model=%s", settings.ocr_provider, settings.ocr_model)
+    else:
+        log.warning("OCR 비활성 (OCR_BASE_URL 미설정) — 영수증은 수동 입력으로만 처리됩니다.")
+    if settings.environment != "development":
+        if settings.jwt_secret.startswith("dev-only"):
+            log.error("⚠️  JWT_SECRET 이 기본값입니다. 운영에서는 반드시 교체하세요.")
+        if settings.invite_code == "ssel-lab":
+            log.error("⚠️  INVITE_CODE 가 기본값입니다. 누구나 가입할 수 있습니다.")
+    yield
+
+
 app = FastAPI(
     title=settings.app_name,
     description="연구실 선결제(prepaid) 잔액 관리 API",
@@ -29,6 +47,7 @@ app = FastAPI(
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
     redoc_url=None,
+    lifespan=lifespan,
 )
 
 if settings.cors_origin_list:
@@ -39,18 +58,6 @@ if settings.cors_origin_list:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-
-@app.on_event("startup")
-def _startup() -> None:
-    settings.ensure_dirs()
-    log.info("DB: %s", settings.sqlalchemy_url)
-    if settings.ocr_enabled:
-        log.info("OCR: provider=%s model=%s", settings.ocr_provider, settings.ocr_model)
-    else:
-        log.warning("OCR 비활성 (OCR_BASE_URL 미설정) — 영수증은 수동 입력으로만 처리됩니다.")
-    if settings.environment != "development" and settings.jwt_secret.startswith("dev-only"):
-        log.error("⚠️  JWT_SECRET 이 기본값입니다. 운영에서는 반드시 교체하세요.")
 
 
 # ── API 라우터 ────────────────────────────────────────────────────
@@ -76,17 +83,20 @@ def health() -> dict:
 # ── 프론트엔드 정적 서빙 (빌드 결과물이 있을 때만) ─────────────────
 _dist = settings.frontend_dist
 if (_dist / "index.html").exists():
-    app.mount("/assets", StaticFiles(directory=_dist / "assets"), name="assets")
+    if (_dist / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=_dist / "assets"), name="assets")
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_fallback(request: Request, full_path: str):
         """SPA 라우팅: /api 가 아닌 경로는 index.html 로 (실제 파일이 있으면 그 파일)."""
         if full_path.startswith("api/"):
             return JSONResponse({"detail": "Not Found"}, status_code=404)
-        candidate = (_dist / full_path).resolve()
-        if full_path and candidate.is_file() and _dist.resolve() in candidate.parents:
+        # 경로 탈출(../) 방어: resolve 후 dist 안쪽인지 확인
+        root = _dist.resolve()
+        candidate = (root / full_path).resolve()
+        if full_path and candidate.is_file() and root in candidate.parents:
             return FileResponse(candidate)
-        return FileResponse(_dist / "index.html")
+        return FileResponse(root / "index.html")
 else:
 
     @app.get("/", include_in_schema=False)
