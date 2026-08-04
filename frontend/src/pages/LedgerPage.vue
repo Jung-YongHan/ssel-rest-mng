@@ -299,7 +299,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <v-container class="pa-3" style="max-width: 720px">
+  <!-- 원장은 컬럼이 7개라 모바일 기준 720px 로는 표가 좁아 셀이 줄바꿈된다.
+       PC 에서 관리하는 화면이므로 데스크톱에서는 폭을 넓게 쓴다. -->
+  <v-container class="pa-3" :style="{ maxWidth: mdAndUp ? '1200px' : '720px' }">
     <div class="d-flex align-center justify-space-between mb-3">
       <h1 class="text-h6">전체 거래 원장</h1>
       <v-btn size="small" variant="outlined" @click="exportCsv">CSV 내보내기</v-btn>
