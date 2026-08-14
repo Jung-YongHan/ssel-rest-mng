@@ -32,7 +32,9 @@ export default defineConfig({
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
           {
-            src: 'pwa-512x512.png',
+            // maskable 은 런처가 원/스퀘어클 등 임의 모양으로 잘라낸다.
+            // 투명 모서리가 있으면 잘린 자리가 검게 보이므로 불투명 사본을 쓴다.
+            src: 'pwa-512x512-maskable.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',
