@@ -325,6 +325,97 @@ docker compose up -d
 
 ---
 
+## 7-2. (선택) HTTPS 붙이기 — 이미 있는 쿠버네티스 ingress-nginx 에 얹기
+
+배포할 서버가 **이미 쿠버네티스 노드**이고 80/443 을 클러스터의 ingress-nginx 가
+쓰고 있다면, 7장의 Caddy 대신 이 방법을 씁니다. 포트를 뺏지 않고 **호스트 이름으로
+나눠 쓰는** 방식이라 기존 서비스에 영향이 없습니다.
+
+먼저 정말 그 상황인지 확인합니다.
+
+```bash
+kubectl get svc -A | grep LoadBalancer      # ingress-nginx 가 80:xxxxx/443:xxxxx 를 잡고 있는지
+kubectl get ingressclass                    # nginx 클래스가 있는지
+kubectl get clusterissuer                   # cert-manager 발급자가 Ready 인지
+```
+
+> `ss -tlnp` 에 80/443 이 **안 보여도** 점유 중일 수 있습니다. kube-proxy 가 IPVS
+> 모드면 LoadBalancer VIP 가 `kube-ipvs0` 에 붙어 커널에서 처리되므로 리스닝 소켓이
+> 없습니다. `ip addr show kube-ipvs0` 로 VIP 를 확인하세요.
+
+### 절차
+
+**1) DNS** — 공개할 호스트명의 A 레코드를 **공인 IP** 로 등록합니다.
+cert-manager 가 HTTP-01 챌린지를 쓰므로, 이 레코드가 없으면 인증서 발급이 실패합니다.
+
+**2) `.env`** — HTTPS 로 서비스하므로 반드시 아래 두 개를 맞춥니다.
+
+```bash
+ENVIRONMENT=production
+COOKIE_SECURE=true
+```
+
+**3) compose 기동** — 3장과 동일합니다.
+
+```bash
+docker compose up -d --build
+curl -s http://localhost:8000/api/health
+```
+
+> ⚠️ **이 구성에서는 7장의 `127.0.0.1:8000` 바인딩을 쓰면 안 됩니다.**
+> 프록시(ingress-nginx 파드)가 **다른 노드**에 있을 수 있어서, 루프백에 묶으면
+> 도달하지 못합니다. 기본값(`0.0.0.0`) 그대로 두고, 대신 방화벽에서 8000 포트를
+> 클러스터 노드 IP 로만 제한하세요.
+>
+> ```bash
+> sudo ufw allow from <노드IP> to any port 8000 proto tcp   # 노드마다 한 줄
+> sudo ufw deny 8000/tcp
+> ```
+
+**4) 매니페스트 적용**
+
+```bash
+cp deploy/k8s/ssel-rest-mng.yaml.example deploy/k8s/ssel-rest-mng.yaml
+# __APP_HOST__ / __APP_NODE_IP__ 를 실제 값으로 치환 (채운 파일은 .gitignore 됨)
+kubectl apply -f deploy/k8s/ssel-rest-mng.yaml --dry-run=server   # 먼저 검증
+kubectl apply -f deploy/k8s/ssel-rest-mng.yaml
+```
+
+**5) 확인**
+
+```bash
+kubectl get ingress ssel-rest-mng-ingress
+kubectl get endpointslice -l kubernetes.io/service-name=ssel-rest-mng
+kubectl get certificate ssel-rest-mng-tls -w      # READY=True 까지 보통 1~2분
+```
+
+### 이 방식에서 꼭 필요한 두 가지 애노테이션
+
+ingress-nginx 의 기본값을 그대로 두면 **두 군데서 터집니다.** 매니페스트에 이미
+들어 있지만, 왜 필요한지 알고 있어야 나중에 지우지 않습니다.
+
+| 애노테이션 | 기본값 | 없으면 |
+|---|---|---|
+| `proxy-body-size: "20m"` | 1m | 영수증 업로드가 **413** (`MAX_UPLOAD_MB=15`) |
+| `proxy-read-timeout: "180"` | 60s | OCR 이 느릴 때 **504** (`OCR_TIMEOUT=120`) |
+
+`proxy-read-timeout` 이 필요한 이유는 업로드 요청 **안에서** OCR 을 동기로 돌리기
+때문입니다(`api/receipts.py` 의 `_run_ocr`). 즉 업로드 HTTP 요청 자체가 최대
+`OCR_TIMEOUT` 만큼 걸릴 수 있습니다.
+
+**전역 ConfigMap(`ingress-nginx-controller`)이 아니라 이 Ingress 에만** 걸어야
+같은 컨트롤러를 쓰는 다른 서비스에 영향이 없습니다.
+
+### 앱을 아예 파드로 옮기지 않는 이유
+
+이 앱은 SQLite 단일 인스턴스입니다. 클러스터의 StorageClass 가 NFS 기반뿐이라면
+**SQLite 를 NFS 에 올리면 안 됩니다** — 파일 락이 신뢰할 수 없고 WAL 모드에서 DB 가
+깨질 수 있습니다. 굳이 파드로 옮기려면 local PV 로 노드에 고정하거나 PostgreSQL 로
+전환해야 하고(`docker-compose.yml` 하단 주석), `replicas: 1` + `strategy: Recreate`
+가 필수입니다. 5장의 볼륨 백업 절차도 전부 다시 써야 합니다.
+
+---
+
 ## 8. 트러블슈팅
 
 ### 로그인이 안 됨 — 아이디/비번은 맞는데 계속 로그인 화면으로 돌아온다

@@ -1,0 +1,108 @@
+# ==============================================================
+#  ssel-rest-mng — 기존 사내 ingress-nginx 에 얹어서 공개하기
+#
+#  이 파일을 복사해서 값을 채우세요. 채운 파일은 커밋되지 않습니다.
+#      cp deploy/k8s/ssel-rest-mng.yaml.example deploy/k8s/ssel-rest-mng.yaml
+#      # __APP_HOST__ / __APP_NODE_IP__ 를 실제 값으로 바꾼 뒤
+#      kubectl apply -f deploy/k8s/ssel-rest-mng.yaml
+#
+#  ⚠️ 이 저장소는 공개입니다. 내부 IP·호스트명을 .example 쪽에 적지 마세요.
+#
+#  ── 무엇을 하는 매니페스트인가 ──────────────────────────────
+#  앱은 쿠버네티스가 아니라 호스트에서 docker compose 로 돈다
+#  (DEPLOY.md 3장). 클러스터의 ingress-nginx 가 이미 80/443 을 쓰고
+#  있으므로, 포트를 뺏는 대신 "셀렉터 없는 Service + 수동
+#  EndpointSlice" 로 그 호스트의 8000 포트를 가리키게 한다.
+#
+#      인터넷 → 공인IP:443 → MetalLB VIP → ingress-nginx
+#             → Service → EndpointSlice → <노드>:8000 (compose 컨테이너)
+#
+#  앱을 파드로 옮기지 않는 이유: 이 앱은 SQLite 단일 인스턴스인데
+#  SQLite 를 NFS 기반 StorageClass 에 올리면 파일 락이 신뢰할 수 없어
+#  DB 가 깨질 수 있다. 파드로 가려면 local PV 로 노드에 고정하거나
+#  PostgreSQL 로 전환해야 한다 (docker-compose.yml 하단 주석 참고).
+#
+#  ── 채울 값 ────────────────────────────────────────────────
+#  __APP_HOST__      공개할 호스트명. 이 이름의 A 레코드가 공인 IP 를
+#                    가리켜야 cert-manager 의 HTTP-01 이 통과한다.
+#  __APP_NODE_IP__   docker compose 가 도는 호스트의 LAN IP.
+#                    DHCP 라면 라우터에서 고정 할당해 둘 것.
+# ==============================================================
+
+---
+# 셀렉터가 없다. 그래서 쿠버네티스가 엔드포인트를 자동으로 채우지 않고,
+# 아래에서 직접 만든 EndpointSlice 가 그대로 유지된다.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssel-rest-mng
+  namespace: default
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+
+---
+# Service 와 이어주는 것은 kubernetes.io/service-name 라벨이다. 이름이
+# 아니라 이 라벨로 묶이므로 지우면 엔드포인트가 사라진다.
+# port.name 도 위 Service 의 port.name 과 반드시 같아야 한다.
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: ssel-rest-mng-manual
+  namespace: default
+  labels:
+    kubernetes.io/service-name: ssel-rest-mng
+addressType: IPv4
+ports:
+  - name: http
+    port: 8000
+    protocol: TCP
+endpoints:
+  - addresses:
+      - __APP_NODE_IP__
+    conditions:
+      ready: true
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ssel-rest-mng-ingress
+  namespace: default
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # ingress-nginx 의 ConfigMap 이 기본값이면 아래 둘을 여기서 덮어써야
+    # 한다. 전역(ConfigMap)으로 바꾸면 같은 컨트롤러를 쓰는 다른
+    # 서비스에도 영향이 간다.
+    #
+    # 기본 1m → 영수증 업로드(MAX_UPLOAD_MB=15)가 413 으로 막힌다.
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+    # 기본 60s → 업로드 요청 안에서 OCR 을 동기로 돌리므로
+    # (api/receipts.py 의 _run_ocr) OCR_TIMEOUT=120 을 넘겨야 504 가 안 난다.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "180"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "180"
+spec:
+  ingressClassName: nginx
+  rules:
+    # 호스트를 명시하면 catch-all(host 없는) 인그레스보다 우선한다.
+    # 즉 같은 컨트롤러를 쓰는 기존 서비스에는 영향이 없다.
+    - host: __APP_HOST__
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ssel-rest-mng
+                port:
+                  number: 8000
+  tls:
+    - hosts:
+        - __APP_HOST__
+      # 다른 서비스의 인증서 시크릿을 재사용하지 않는다. 공유하면
+      # 한쪽 갱신 실패가 다른 쪽 서비스까지 끌고 내려간다.
+      secretName: ssel-rest-mng-tls
