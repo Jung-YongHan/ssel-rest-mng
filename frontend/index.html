@@ -18,10 +18,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" type="image/png" href="/pwa-192x192.png" sizes="192x192" />
-    <!-- iOS 는 manifest 의 icons 가 아니라 이 링크를 쓴다. sizes 를 명시해야
-         홈 화면 추가 때 확실히 잡는다. 파일은 알파 없는 풀블리드 정사각형이어야
-         한다 (iOS 가 알파를 검정으로 합성하고 자체 라운딩을 씌우기 때문) -->
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <!-- iOS 홈 화면 아이콘. 알파 없는 풀블리드 정사각형이어야 한다
+         (iOS 가 알파를 검정으로 합성한 뒤 자체 라운딩 마스크를 씌운다).
+         ⚠️ 그림을 바꿀 때는 -vN 을 올려 URL 을 바꿀 것 — iOS 는 홈 화면
+            아이콘을 URL 단위로 캐시해서, 같은 이름이면 Safari 데이터를
+            지워도 예전 결과를 계속 쓴다.
+         /apple-touch-icon.png 은 링크 없이 찾아가는 관례 경로라 함께 남겨둔다. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-v2.png" />
     <title>연구실 선결제 관리</title>
 
     <!--

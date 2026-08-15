@@ -15,7 +15,7 @@ export default defineConfig({
     vuetify({ autoImport: true }),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'apple-touch-icon-v2.png'],
       manifest: {
         name: '연구실 선결제 관리',
         short_name: '선결제',
@@ -28,13 +28,19 @@ export default defineConfig({
         orientation: 'portrait',
         background_color: '#FFFFFF',
         theme_color: THEME_COLOR,
+        // 경로는 절대(/로 시작)로 쓴다. 상대 경로는 manifest 기준으로 풀리는데
+        // 일부 브라우저가 문서 URL 기준으로 잘못 푸는 사례가 있다.
+        //
+        // ⚠️ 아이콘 그림을 바꿀 때는 파일 내용만 갈아끼우지 말고 -vN 을 올릴 것.
+        //    iOS 는 홈 화면 아이콘을 URL 단위로 캐시해서, 같은 이름이면
+        //    Safari 데이터를 지워도 예전 아이콘(또는 실패 결과)을 계속 쓴다.
         icons: [
-          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/pwa-192x192-v2.png', sizes: '192x192', type: 'image/png' },
+          { src: '/pwa-512x512-v2.png', sizes: '512x512', type: 'image/png' },
           {
             // maskable 은 런처가 원/스퀘어클 등 임의 모양으로 잘라낸다.
             // 투명 모서리가 있으면 잘린 자리가 검게 보이므로 불투명 사본을 쓴다.
-            src: 'pwa-512x512-maskable.png',
+            src: '/pwa-512x512-maskable-v2.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',
