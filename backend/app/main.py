@@ -87,7 +87,10 @@ if (_dist / "index.html").exists():
     if (_dist / "assets").is_dir():
         app.mount("/assets", StaticFiles(directory=_dist / "assets"), name="assets")
 
-    @app.get("/{full_path:path}", include_in_schema=False)
+    # HEAD 도 받는다. FastAPI 의 @app.get 은 HEAD 를 자동으로 붙이지 않아
+    # 405 가 나가는데, 아이콘·정적 파일의 존재를 HEAD 로 먼저 확인하는
+    # 클라이언트가 있다.
+    @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)
     def spa_fallback(request: Request, full_path: str):
         """SPA 라우팅: /api 가 아닌 경로는 index.html 로 (실제 파일이 있으면 그 파일)."""
         if full_path.startswith("api/"):

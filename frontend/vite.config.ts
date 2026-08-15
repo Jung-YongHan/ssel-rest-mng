@@ -34,9 +34,22 @@ export default defineConfig({
         // ⚠️ 아이콘 그림을 바꿀 때는 파일 내용만 갈아끼우지 말고 -vN 을 올릴 것.
         //    iOS 는 홈 화면 아이콘을 URL 단위로 캐시해서, 같은 이름이면
         //    Safari 데이터를 지워도 예전 아이콘(또는 실패 결과)을 계속 쓴다.
+        // purpose 를 생략하면 규격상 'any' 지만, iOS 는 'any' 가 명시된 아이콘을
+        // 고르는 쪽이 확실하다. maskable 만 있는 목록은 홈 화면 아이콘 선택에서
+        // 통째로 건너뛸 수 있으므로 'any' 를 반드시 함께 둔다.
         icons: [
-          { src: '/pwa-192x192-v2.png', sizes: '192x192', type: 'image/png' },
-          { src: '/pwa-512x512-v2.png', sizes: '512x512', type: 'image/png' },
+          {
+            src: '/pwa-192x192-v2.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/pwa-512x512-v2.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any',
+          },
           {
             // maskable 은 런처가 원/스퀘어클 등 임의 모양으로 잘라낸다.
             // 투명 모서리가 있으면 잘린 자리가 검게 보이므로 불투명 사본을 쓴다.
