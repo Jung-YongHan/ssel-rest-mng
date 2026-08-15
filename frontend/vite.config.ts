@@ -51,6 +51,13 @@ export default defineConfig({
             purpose: 'any',
           },
           {
+            // macOS Safari / iOS 26 Liquid Glass 용 대형 아이콘
+            src: '/apple-touch-icon-1024.png',
+            sizes: '1024x1024',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
             // maskable 은 런처가 원/스퀘어클 등 임의 모양으로 잘라낸다.
             // 투명 모서리가 있으면 잘린 자리가 검게 보이므로 불투명 사본을 쓴다.
             src: '/pwa-512x512-maskable-v2.png',
@@ -67,7 +74,8 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         navigateFallback: 'index.html',
         // API 응답은 절대 캐시/오프라인 셸로 대체하지 않는다.
-        navigateFallbackDenylist: [/^\/api/],
+        // icon-test.html 은 서비스워커의 영향을 받지 않아야 대조군이 된다.
+        navigateFallbackDenylist: [/^\/api/, /^\/icon-test\d*\.html$/],
         runtimeCaching: [
           {
             urlPattern: ({ request }) => request.destination === 'font',
