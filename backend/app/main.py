@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import PurePosixPath
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -96,6 +97,15 @@ if (_dist / "index.html").exists():
         candidate = (root / full_path).resolve()
         if full_path and candidate.is_file() and root in candidate.parents:
             return FileResponse(candidate)
+        # SPA 라우트에는 확장자가 없다(/login, /restaurants/3). 확장자가 있는데
+        # 파일이 없으면 없는 정적 파일이므로 404 를 준다.
+        #
+        # index.html 을 200 으로 돌려주면 클라이언트가 그 HTML 을 이미지·스크립트로
+        # 디코딩하려다 실패한다. 실제로 iOS 가 홈 화면 추가 때 관례 경로인
+        # /apple-touch-icon-precomposed.png 를 먼저 찾는데, 여기서 200 + HTML 을
+        # 받고 "아이콘은 있는데 깨졌다"로 판단해 아이콘 대신 글자 타일을 만들었다.
+        if PurePosixPath(full_path).suffix:
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
         return FileResponse(root / "index.html")
 else:
 
