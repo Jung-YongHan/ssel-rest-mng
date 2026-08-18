@@ -377,8 +377,10 @@ export const transactionApi = {
   list(params?: TransactionQuery): Promise<TransactionListOut>
   create(body: TransactionCreateIn): Promise<TransactionCreateOut>
   void_(id: number, reason: string): Promise<TransactionCreateOut>
-  exportCsvUrl(params?: TransactionQuery): string
+  /** CSV 를 받아 공유 시트(iOS)나 blob 다운로드로 사용자에게 넘긴다 */
+  exportCsv(params?: TransactionQuery): Promise<DownloadResult>
 }
+export type DownloadResult = "shared" | "downloaded" | "cancelled"
 export const statsApi = {
   summary(): Promise<SummaryOut>
   monthly(months?: number): Promise<MonthlyOut>
@@ -426,10 +428,15 @@ export function nowLocalInput(): string                          // "YYYY-MM-DDT
   fetchMe(): Promise<void>, login(email,password): Promise<void>,
   register(body): Promise<void>, logout(): Promise<void> }
 
-// src/stores/app.ts  — useAppStore()   전역 스낵바 + 서버 설정
+// src/stores/app.ts  — useAppStore()   전역 스낵바 + 서버 설정 + 앱 업데이트
 { ocrEnabled: boolean, lowBalanceThreshold: number,
   loadHealth(): Promise<void>,
-  toast(message: string, color?: "success"|"error"|"info"|"warning"): void }
+  toast(message: string, color?: "success"|"error"|"info"|"warning"): void,
+
+  // 서비스워커 갱신 — App.vue 만 쓴다 (페이지는 건드리지 않는다)
+  updateReady: boolean,            // 새 버전이 설치를 마치고 교체를 기다리는 중
+  initAppUpdates(): Promise<void>, // 등록 + 앱 복귀/주기적 확인 (마운트 시 1회)
+  applyUpdate(): void }            // 교체 후 새로고침
 ```
 `useAppStore().toast(...)` 는 `App.vue` 의 `<v-snackbar>` 가 렌더한다. 페이지는 자체 스낵바를 만들지 말 것.
 

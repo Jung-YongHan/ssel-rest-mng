@@ -132,7 +132,10 @@ const vuetify = createVuetify({
     VFileInput: { variant: 'outlined', density: 'comfortable', hideDetails: 'auto' },
     VDataTable: { density: 'comfortable' },
     VDataTableServer: { density: 'comfortable' },
-    VDialog: { scrim: 'rgba(11, 18, 32, 0.5)' },
+    // 스크림 색은 **불투명**하게 준다. Vuetify 가 `.v-overlay__scrim` 에
+    // `opacity: var(--v-overlay-opacity)` 를 한 번 더 곱하므로, 여기에 알파를 넣으면
+    // 두 번 곱해져 거의 투명해진다. 농도는 styles.css 의 `--v-overlay-opacity`.
+    VDialog: { scrim: '#0B1220' },
     VTooltip: { location: 'top' },
     VProgressLinear: { rounded: true, height: 6 },
     VSkeletonLoader: { boilerplate: false },
@@ -141,5 +144,30 @@ const vuetify = createVuetify({
 
 // Vuetify 는 SASS 없이 폰트를 바꿀 수 없으므로 CSS 변수로 주입한다.
 document.documentElement.style.setProperty('--app-font', FONT_STACK)
+
+/*
+ * 사라진 청크에 대한 안전망.
+ *
+ * 라우트를 전부 lazy import 하므로, 배포 직후 열려 있던 화면에서 다른 탭으로
+ * 넘어가면 이미 지워진 해시 파일명을 요청해 빈 화면이 된다. 서비스워커가 있으면
+ * 옛 프리캐시가 막아 주지만, 서비스워커를 못 쓰는 브라우저에는 방어가 없다.
+ * 새 번들을 받도록 한 번만 새로고침한다.
+ */
+const CHUNK_RELOAD_KEY = 'ssel.chunkReloadAt'
+const CHUNK_RELOAD_COOLDOWN_MS = 60_000
+
+window.addEventListener('vite:preloadError', (event) => {
+  try {
+    // 방금 새로고침하고도 또 실패했다면 새로고침 루프다 — 그냥 에러를 보여준다.
+    const last = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY) ?? 0)
+    if (Date.now() - last < CHUNK_RELOAD_COOLDOWN_MS) return
+    sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()))
+  } catch {
+    // 저장소를 못 쓰면 루프를 막을 수 없으므로 새로고침하지 않는다.
+    return
+  }
+  event.preventDefault() // 라우터로 에러를 흘리지 않고 여기서 처리한다
+  window.location.reload()
+})
 
 createApp(App).use(createPinia()).use(vuetify).use(router).mount('#app')

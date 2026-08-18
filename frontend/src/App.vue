@@ -73,6 +73,11 @@ watch(
   isDark,
   (dark) => {
     theme.change(dark ? 'dark' : 'light')
+    // 브라우저 기본 UI(네이티브 날짜 선택기·자동완성·스크롤바)와 기본 글자색이
+    // OS 설정이 아니라 **앱 테마**를 따르게 한다. index.html 의
+    // `color-scheme: light dark` 는 첫 페인트용이고, 앱 테마를 라이트로 바꿔 둔
+    // 사용자가 OS 는 다크인 상태면 둘이 어긋나 네이티브 요소가 반대로 그려진다.
+    document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
     try {
       localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light')
     } catch {
@@ -95,6 +100,8 @@ async function onLogout(): Promise<void> {
 
 onMounted(() => {
   void appStore.loadHealth()
+  // 홈 화면 PWA 에는 새로고침 수단이 없다 → 앱이 스스로 새 버전을 확인한다.
+  void appStore.initAppUpdates()
 })
 </script>
 
@@ -215,6 +222,26 @@ onMounted(() => {
       <span style="white-space: pre-line">{{ appStore.snackbarMessage }}</span>
       <template #actions>
         <v-btn variant="text" @click="appStore.snackbar = false">닫기</v-btn>
+      </template>
+    </v-snackbar>
+
+    <!-- 새 버전 안내 — 스스로 사라지지 않는다(timeout -1). 위쪽 스낵바는 잠깐 뜨는
+         알림용이라 겹치지 않게 아래에 둔다. 하단 내비가 있으면 그만큼 띄운다. -->
+    <v-snackbar
+      v-model="appStore.updateReady"
+      :timeout="-1"
+      location="bottom"
+      :class="showBottomNav ? 'mb-16' : ''"
+      rounded="lg"
+      multi-line
+    >
+      <div class="d-flex align-center ga-2">
+        <v-icon icon="mdi-refresh" size="20" />
+        <span>새 버전이 있습니다.</span>
+      </div>
+      <template #actions>
+        <v-btn variant="text" @click="appStore.applyUpdate()">업데이트</v-btn>
+        <v-btn variant="text" @click="appStore.updateReady = false">나중에</v-btn>
       </template>
     </v-snackbar>
   </v-app>

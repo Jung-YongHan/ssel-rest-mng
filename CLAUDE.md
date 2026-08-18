@@ -33,7 +33,7 @@ frontend/src/
   styles.css         디자인 유틸리티 클래스 (페이지에서 재사용, 재정의 금지)
   App.vue            앱 셸(앱바·내비·전역 스낵바·테마 토글)
   api/               client(axios) · types · endpoints ← 페이지의 유일한 API 표면
-  stores/            auth · app(스낵바·서버설정)
+  stores/            auth · app(스낵바·서버설정·앱 업데이트)
   utils/format.ts    won() · dateTime() · txLabel() 등 표시 포맷터
   pages/             9개 화면
 ```
@@ -87,12 +87,23 @@ docker compose up -d --build     # 엔트리포인트가 alembic upgrade head �
 7. **OCR 은 절대 예외를 던지지 않는다.** 모든 실패를 `OcrResult.error` 로 변환하고,
    업로드는 실패해도 201 을 반환한다. 모든 플로우는 OCR 없이 수동 입력으로 완주 가능해야 한다.
 8. **UI 에 이모지 금지.** MDI outline 아이콘을 쓴다 (DESIGN.md §3 매핑표).
-9. **카드 테두리**: `main.ts` 가 `VCard` 기본값을 `variant="outlined"` 로 두고,
-   `styles.css` 가 Vuetify 의 `border: thin solid currentColor` 를 헤어라인 색으로 보정한다.
-   이 보정을 지우면 전 화면 카드가 진한 잉크색 테두리가 된다.
+9. **`VCard` 기본값이 `variant="outlined"` 라서 생기는 보정 두 가지** (`styles.css`).
+   지우면 조용히 화면이 망가진다.
+   - **테두리**: Vuetify 의 `border: thin solid currentColor` 를 헤어라인 색으로 되돌린다.
+     선택자는 반드시 `.v-card.v-card--variant-outlined` — 컴포넌트별 CSS 가 이 파일보다
+     **뒤에** 번들되므로 특이도가 같으면 보정이 통째로 무시된다.
+   - **다이얼로그 배경**: outlined 는 `background: transparent` 이고 `VDialog.css` 는
+     패널 배경을 칠하지 않는다(`VMenu.css` 만 칠한다). 보정을 지우면 모든 모달이
+     속이 비쳐 뒤 화면과 겹쳐 보인다. 스크림 색은 **불투명**하게 줄 것 —
+     Vuetify 가 `--v-overlay-opacity` 를 한 번 더 곱한다.
+   - **다이얼로그 글자색**: outlined 는 `color: inherit` 인데, 오버레이는
+     `.v-application` 이 아니라 **`<body>` 바로 아래**로 teleport 되므로 테마
+     잉크색이 닿지 않는다. `styles.css` 가 `.v-overlay` 에 칠해 둔다. 지우면
+     **OS 다크 + 앱 라이트**(또는 그 반대)에서 다이얼로그 내용이 전부 사라진다.
+     같은 이유로 `App.vue` 가 `documentElement.style.colorScheme` 을 앱 테마에
+     맞춰 준다 — 네이티브 컨트롤이 OS 를 따라가면 색이 반대로 나온다.
 10. **`backend/alembic.ini` 는 ASCII 로 유지.** Alembic 이 시스템 로케일(cp949) 로 읽어서
     한글 주석을 넣으면 `UnicodeDecodeError` 로 죽는다. (다른 파이썬 파일은 한글 주석 OK)
-
 ## 4. 컨벤션
 
 - **사용자 노출 문구는 전부 한국어.** 문구 표준은 CONTRACT.md §5.7, 톤은 DESIGN.md §5

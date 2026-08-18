@@ -61,6 +61,9 @@ const users = ref<UserOut[]>([])
 /* 필터 카드 (모바일에서는 접은 채로 시작) */
 const filtersOpen = ref(false)
 
+/* CSV 내보내기 (본문을 받아오는 동안 버튼을 잠근다) */
+const exporting = ref(false)
+
 /* 기록 취소 */
 const voidDialog = ref(false)
 const voidTarget = ref<TransactionOut | null>(null)
@@ -351,14 +354,19 @@ async function confirmVoid() {
   }
 }
 
-function exportCsv() {
-  const url = transactionApi.exportCsvUrl(currentQuery())
-  const a = document.createElement('a')
-  a.href = url
-  a.download = ''
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
+async function exportCsv() {
+  if (exporting.value) return
+  exporting.value = true
+  try {
+    const result = await transactionApi.exportCsv(currentQuery())
+    if (result === 'shared') appStore.toast('CSV 파일을 내보냈습니다.', 'success')
+    else if (result === 'downloaded') appStore.toast('CSV 파일을 내려받았습니다.', 'success')
+    // 'cancelled' — 사용자가 공유 시트를 닫은 것이므로 알리지 않는다.
+  } catch (e) {
+    appStore.toast(errorMessage(e), 'error')
+  } finally {
+    exporting.value = false
+  }
 }
 
 function openReceipt(receiptId: number | null) {
@@ -385,7 +393,12 @@ onMounted(() => {
   <v-container :class="['pa-4', mdAndUp ? 'wide-container' : 'flow-container']">
     <div class="d-flex align-center justify-space-between ga-3 mb-4">
       <h1 class="page-title">전체 거래 원장</h1>
-      <v-btn variant="outlined" prepend-icon="mdi-tray-arrow-down" @click="exportCsv">
+      <v-btn
+        variant="outlined"
+        prepend-icon="mdi-tray-arrow-down"
+        :loading="exporting"
+        @click="exportCsv"
+      >
         CSV 내보내기
       </v-btn>
     </div>

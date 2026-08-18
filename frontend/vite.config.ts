@@ -14,7 +14,14 @@ export default defineConfig({
     // Vuetify 컴포넌트 자동 import + 스타일 트리셰이킹
     vuetify({ autoImport: true }),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'autoUpdate' 는 새 서비스워커가 곧바로 skipWaiting + clientsClaim 을 한다.
+      // 그러면 이미 떠 있는 화면이 옛 JS 를 돌리는 채로 프리캐시만 새것으로 바뀌어,
+      // 그 뒤에 다른 탭(lazy import)으로 넘어가면 사라진 청크를 요청하다 죽는다.
+      // 'prompt' 는 사용자가 받아들일 때까지 옛 버전을 온전히 유지한다.
+      registerType: 'prompt',
+      // 등록은 stores/app.ts 가 직접 한다 (갱신 확인·안내를 앱이 제어해야 하므로).
+      // 여기서 registerSW.js 를 심으면 등록이 두 번 일어난다.
+      injectRegister: null,
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'apple-touch-icon-v2.png'],
       manifest: {
         name: '연구실 선결제 관리',

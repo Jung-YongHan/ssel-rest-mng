@@ -44,13 +44,76 @@ function clean(params?: Params): Params | undefined {
   return Object.keys(out).length ? out : undefined
 }
 
-/** 링크(`<a href>`)로 바로 내려받을 수 있게 절대 경로 쿼리스트링을 만든다. */
-function queryString(params?: Params): string {
-  const cleaned = clean(params)
-  if (!cleaned) return ''
-  const search = new URLSearchParams()
-  for (const [key, value] of Object.entries(cleaned)) search.append(key, String(value))
-  return search.toString()
+// ── 파일 내려받기 ───────────────────────────────────────────────
+
+/** 파일을 사용자에게 넘긴 결과 (페이지가 안내 문구를 고르는 데 쓴다). */
+export type DownloadResult = 'shared' | 'downloaded' | 'cancelled'
+
+/** 서버가 `Content-Disposition` 으로 준 파일명을 뽑는다 (없으면 fallback). */
+function filenameFrom(disposition: unknown, fallback: string): string {
+  if (typeof disposition !== 'string') return fallback
+  const encoded = /filename\*=\s*UTF-8''([^;]+)/i.exec(disposition)
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1])
+    } catch {
+      /* 잘못 인코딩된 헤더는 무시하고 아래 plain 형식을 본다 */
+    }
+  }
+  const plain = /filename\s*=\s*"?([^";]+)"?/i.exec(disposition)
+  return plain ? plain[1].trim() : fallback
+}
+
+/**
+ * iOS/iPadOS 인지. 여기서만 UA 를 본다.
+ *
+ * 기능 감지로는 구분할 수 없는 **동작 차이**를 다루기 때문이다: 다른 플랫폼은
+ * 파일을 내려받아도 보던 화면에 그대로 남지만, iOS 는 문서 미리보기가 화면을
+ * 덮으면서 뒤로가기·닫기를 주지 않아 앱으로 돌아올 수단이 사라진다.
+ * (iPadOS 는 데스크톱 UA 를 보내므로 터치 지원 여부로 한 번 더 거른다)
+ */
+function isIosLike(): boolean {
+  const ua = navigator.userAgent
+  if (/iPad|iPhone|iPod/.test(ua)) return true
+  return ua.includes('Macintosh') && navigator.maxTouchPoints > 1
+}
+
+/**
+ * 받은 파일을 사용자에게 넘긴다.
+ *
+ * iOS 에서는 공유 시트를 먼저 쓴다 — 시트에는 항상 '취소'가 있어 어떤 경우에도
+ * 원래 화면으로 돌아올 수 있다. 그 외 플랫폼은 평소대로 blob 링크로 내려받는다
+ * (데스크톱에서 공유 시트를 띄우면 오히려 낯설다).
+ */
+async function saveFile(blob: Blob, filename: string): Promise<DownloadResult> {
+  const file = new File([blob], filename, {
+    type: blob.type || 'application/octet-stream',
+  })
+
+  const canShareFile =
+    typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })
+  if (isIosLike() && canShareFile) {
+    try {
+      await navigator.share({ files: [file] })
+      return 'shared'
+    } catch (e) {
+      // 사용자가 시트를 닫은 것뿐이면 다운로드로 다시 밀어붙이지 않는다.
+      if ((e as DOMException | undefined)?.name === 'AbortError') return 'cancelled'
+      // 사용자 제스처 만료(NotAllowedError) 등은 아래 다운로드로 넘어간다.
+    }
+  }
+
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.rel = 'noopener'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  // 사파리는 클릭 직후 revoke 하면 내려받기가 취소된다 → 넉넉히 미뤄서 해제한다.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  return 'downloaded'
 }
 
 // ── 인증 ────────────────────────────────────────────────────────
@@ -62,12 +125,19 @@ export const authApi = {
     password: string
     invite_code: string
   }): Promise<UserOut> {
-    const { data } = await client.post<UserOut>('/auth/register', body)
+    // 네트워크가 끊겨 요청이 서버까지 못 간 경우 한 번 다시 보낸다.
+    // 중복으로 도착해도 서버가 409(이미 등록된 이메일)로 막으므로 안전하다.
+    const { data } = await client.post<UserOut>('/auth/register', body, {
+      retryOnNetworkError: true,
+    })
     return data
   },
 
   async login(body: { email: string; password: string }): Promise<UserOut> {
-    const { data } = await client.post<UserOut>('/auth/login', body)
+    // 로그인은 멱등이라 재시도해도 부수효과가 없다.
+    const { data } = await client.post<UserOut>('/auth/login', body, {
+      retryOnNetworkError: true,
+    })
     return data
   },
 
@@ -180,10 +250,20 @@ export const transactionApi = {
     return data
   },
 
-  /** CSV 내려받기 링크 (절대 경로 → `<a :href>` 로 바로 다운로드) */
-  exportCsvUrl(params?: TransactionQuery): string {
-    const qs = queryString(params as Params | undefined)
-    return qs ? `/api/transactions/export.csv?${qs}` : '/api/transactions/export.csv'
+  /**
+   * 현재 필터 그대로 CSV 를 받아 사용자에게 넘긴다.
+   *
+   * 링크로 곧장 이동시키지 않는다 — iOS 는 그 순간 앱 화면을 문서 미리보기로
+   * 덮어 버리고 돌아올 수단을 주지 않는다. 본문을 먼저 받아 두고 공유 시트
+   * (없으면 blob 다운로드)로 넘긴다.
+   */
+  async exportCsv(params?: TransactionQuery): Promise<DownloadResult> {
+    const { data, headers } = await client.get<Blob>('/transactions/export.csv', {
+      params: clean(params as Params | undefined),
+      responseType: 'blob',
+      headers: { Accept: 'text/csv' },
+    })
+    return saveFile(data, filenameFrom(headers['content-disposition'], 'transactions.csv'))
   },
 }
 
@@ -292,7 +372,9 @@ export function errorMessage(e: unknown): string {
     return '요청 시간이 초과되었습니다. 네트워크 상태를 확인하고 다시 시도해 주세요.'
   }
 
-  return '서버에 연결할 수 없습니다. 네트워크 상태를 확인해 주세요.'
+  // 여기까지 오면 응답 자체를 받지 못한 것이다. client.ts 가 이미 한 번
+  // 다시 보내 본 뒤이므로, 사용자에게도 재시도를 권한다.
+  return '서버에 연결하지 못했습니다. 네트워크 상태를 확인하고 다시 시도해 주세요.'
 }
 
 /** 서버가 409 로 음수잔액을 거부했는지 (→ 확인 모달 후 `allow_negative: true` 로 재요청) */
