@@ -104,6 +104,13 @@ docker compose up -d --build     # 엔트리포인트가 alembic upgrade head �
      맞춰 준다 — 네이티브 컨트롤이 OS 를 따라가면 색이 반대로 나온다.
 10. **`backend/alembic.ini` 는 ASCII 로 유지.** Alembic 이 시스템 로케일(cp949) 로 읽어서
     한글 주석을 넣으면 `UnicodeDecodeError` 로 죽는다. (다른 파이썬 파일은 한글 주석 OK)
+11. **셸에는 캐시 헤더를 반드시 붙인다** (`main.py` 의 정적 서빙).
+    `index.html`·`sw.js`·`manifest.webmanifest` = `no-cache`, 해시가 박힌 `assets/*` =
+    `immutable`. 지우면 브라우저가 휴리스틱 캐싱으로 옛 셸을 붙잡고, 그 셸이 이미
+    사라진 청크를 가리켜 **앱이 흰 화면이 된다** (iOS 홈 화면 웹앱에서 겪었다).
+    `PUBLIC_ORIGIN` 이 있으면 다른 Host 의 **화면 요청만** 정규 주소로 307 —
+    API·정적 파일까지 옮기면 CORS 로 조용히 깨지고 healthcheck 도 흔들린다.
+
 ## 4. 컨벤션
 
 - **사용자 노출 문구는 전부 한국어.** 문구 표준은 CONTRACT.md §5.7, 톤은 DESIGN.md §5

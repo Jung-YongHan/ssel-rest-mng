@@ -49,6 +49,8 @@ os.environ["OCR_API_KEY"] = ""
 os.environ["MAX_UPLOAD_MB"] = "15"
 os.environ["LOW_BALANCE_THRESHOLD"] = "30000"
 os.environ["CORS_ORIGINS"] = ""
+# 정규 주소 리다이렉트는 테스트가 필요할 때만 켠다 (test_static.py)
+os.environ["PUBLIC_ORIGIN"] = ""
 
 # `settings.data_dir` / `upload_dir` 은 BACKEND_DIR 전역을 **호출 시점에** 읽는
 # property 이므로, 전역을 임시 경로로 갈아끼우면 업로드 파일도 tmp 로 간다.

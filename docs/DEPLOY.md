@@ -76,6 +76,7 @@ nano .env      # 또는 vim
 | `ADMIN_PASSWORD` | 최초 관리자 비밀번호 (8자 이상, 반드시 변경) |
 | `ADMIN_NAME` | 최초 관리자 표시 이름 |
 | `COOKIE_SECURE` | HTTPS 를 붙일 예정이면 `true`, HTTP 로 운영하면 **`false`** |
+| `PUBLIC_ORIGIN` | HTTPS 로 공개할 때만. 공개 주소를 스킴까지 (`https://ssel.example.com`). HTTP 내부망 전용이면 비워둠 |
 | `PORT` | (선택) 호스트에 노출할 포트. 기본 `8000` |
 
 OCR 서버가 아직 준비되지 않았다면 일단 `OCR_PROVIDER=disabled` 로 두고 배포하세요.
@@ -296,6 +297,9 @@ sudo systemctl reload caddy
 ```bash
 # HTTPS 로 서비스하므로
 COOKIE_SECURE=true
+# 정규 주소 — 다른 Host(예: http://<서버IP>:8000)로 들어온 화면 요청을 여기로 보낸다.
+# 그 주소로 홈 화면에 PWA 를 추가해 버리는 사고를 막는다 (§8 참고).
+PUBLIC_ORIGIN=https://ssel.example.com
 ```
 
 ```bash
@@ -348,12 +352,20 @@ kubectl get clusterissuer                   # cert-manager 발급자가 Ready �
 **1) DNS** — 공개할 호스트명의 A 레코드를 **공인 IP** 로 등록합니다.
 cert-manager 가 HTTP-01 챌린지를 쓰므로, 이 레코드가 없으면 인증서 발급이 실패합니다.
 
-**2) `.env`** — HTTPS 로 서비스하므로 반드시 아래 두 개를 맞춥니다.
+**2) `.env`** — HTTPS 로 서비스하므로 반드시 아래 세 개를 맞춥니다.
 
 ```bash
 ENVIRONMENT=production
 COOKIE_SECURE=true
+PUBLIC_ORIGIN=https://<공개할 호스트명>
 ```
+
+`PUBLIC_ORIGIN` 을 넣으면 이 주소가 아닌 Host 로 들어온 **화면 요청**이 정규 주소로
+307 리다이렉트됩니다. 이 구성에서는 8000 포트가 노드에 열려 있어 누군가
+`http://<서버IP>:8000` 을 그대로 열거나 **그 주소로 홈 화면에 PWA 를 추가**하기
+쉬운데, 그렇게 설치된 앱은 사내망을 벗어나면 아무 요청도 닿지 않으면서 화면만
+서비스워커 캐시로 떠서 "로그인만 안 되는 앱"이 됩니다(§8 참고). API 요청과 정적
+파일은 옮기지 않으므로 ingress·healthcheck 에는 영향이 없습니다.
 
 **3) compose 기동** — 3장과 동일합니다.
 
@@ -440,6 +452,63 @@ docker compose up -d
 - 계정이 비활성화됨 → 401 `"계정을 사용할 수 없습니다."` (관리자가 `/admin` 에서 활성화)
 - 초대코드 오류 → 403 `"초대코드가 올바르지 않습니다."` (`.env` 의 `INVITE_CODE` 확인)
 - 비밀번호가 8자 미만 → 422. 가입 자체가 안 됩니다
+
+### 홈 화면에 추가한 웹앱(PWA)만 "서버에 연결하지 못했습니다"
+
+**원인: 그 웹앱이 지금 닿지 않는 주소로 설치되어 있습니다.** 거의 항상
+`http://<서버 LAN IP>:8000` 으로 홈 화면에 추가한 경우입니다.
+
+브라우저에서는 잘 되는데 홈 화면 앱만 안 되는 이유는 두 가지가 겹쳐서입니다.
+
+- 서비스워커가 셸(`index.html` + JS/CSS)을 프리캐시하므로 **서버에 못 닿아도
+  로그인 화면까지는 정상적으로 그려집니다.** 반대로 `/api/*` 는 캐시 대상이
+  아니어서(`navigateFallbackDenylist`) 반드시 네트워크로 나갑니다 → 화면은
+  멀쩡한데 로그인만 실패하는 모습이 됩니다.
+- iOS 16.4+ 는 홈 화면 웹앱에 **사파리와 분리된 저장소**를 줍니다. 그래서 사파리
+  쪽이 멀쩡해도 웹앱만 옛 주소·옛 캐시에 갇혀 있을 수 있습니다.
+
+진단 — 폰에서 사파리로 `/api/health` 를 직접 엽니다. `/api` 는 절대 캐시되지
+않으므로 순수하게 네트워크만 봅니다.
+
+```
+https://<공개 호스트명>/api/health     → JSON 이 뜨면 네트워크는 정상
+```
+
+JSON 이 뜨는데 웹앱만 안 되면 **설치된 주소가 문제**입니다.
+
+1. 웹앱 안에서 공유 버튼 → 시트 맨 위 주소 확인 (사설 IP + `:8000` 이면 확정)
+2. 홈 화면 아이콘 길게 눌러 **앱 제거** (아이콘에 주소가 박혀 있어 수정 불가)
+3. 사파리에서 `https://<공개 호스트명>` 접속 → 로그인 확인
+4. 공유 → **홈 화면에 추가**
+
+서버 로그로 교차 확인할 수 있습니다. 웹앱이 부팅되면 `/api/health` 와
+`/api/auth/me` 가 **반드시** 찍히므로, 그 두 줄이 없다면 요청이 서버까지 오지
+않은 것입니다(= 로그인 로직 문제가 아님).
+
+```bash
+docker compose logs app | grep -E 'auth/(me|login)' | tail
+```
+
+재발 방지: `.env` 에 `PUBLIC_ORIGIN` 을 설정하세요. LAN 주소로 들어온 화면
+요청이 정규 주소로 307 리다이렉트되어 잘못된 주소로는 설치 자체가 되지 않습니다.
+평문 HTTP 주소로 설치된 앱은 `COOKIE_SECURE=true` 쿠키가 저장되지 않아 사내망
+안에서도 로그인을 끝낼 수 없으므로, 되살리려 하지 말고 다시 설치해야 합니다.
+
+### 배포했는데 폰·PC 에서 옛 화면이 그대로 보인다
+
+`Cache-Control` 을 지웠는지 확인하세요. `backend/app/main.py` 는 셸
+(`index.html`·`sw.js`·`manifest.webmanifest`)에 `no-cache`, 해시가 붙은
+`assets/*` 에 `immutable` 을 붙입니다. 셸에 헤더가 없으면 브라우저가 휴리스틱
+캐싱으로 옛 셸을 계속 쓰고, 그 셸이 이미 사라진 청크를 가리키면 **앱이 통째로
+뜨지 않습니다**(흰 화면).
+
+```bash
+curl -sI https://<공개 호스트명>/ | grep -i cache-control        # no-cache
+curl -sI https://<공개 호스트명>/sw.js | grep -i cache-control   # no-cache
+```
+
+사용자 쪽 즉시 해결은 앱 안에서 뜨는 `새 버전이 있습니다 → 업데이트` 이고,
+그것도 안 되면 홈 화면 앱을 제거하고 다시 추가하면 됩니다.
 
 ### OCR 이 타임아웃 / 응답이 없음
 

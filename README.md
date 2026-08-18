@@ -184,6 +184,7 @@ docker compose logs -f app
 |---|---|---|
 | `ENVIRONMENT` | `development` / `production`. production 인데 `JWT_SECRET` 이 기본값이면 서버가 기동 로그에 경고를 남긴다 | `development` |
 | `DATABASE_URL` | 비워두면 `backend/data/app.db` (SQLite) 자동 사용. PostgreSQL 예: `postgresql+psycopg://user:pw@host:5432/dbname` | *(비어 있음)* |
+| `PUBLIC_ORIGIN` | 공개 주소(스킴 포함, 예 `https://app.example.com`). 이 주소가 아닌 Host 로 들어온 **화면 요청**을 여기로 307 리다이렉트한다 — LAN 주소로 PWA 를 설치해 버리는 사고 방지. API·정적 파일은 옮기지 않는다 | *(비어 있음)* |
 
 ### 인증
 

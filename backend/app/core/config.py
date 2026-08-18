@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     # ── 앱 ──
     app_name: str = "연구실 선결제 관리"
     environment: str = "development"
+    # 공개 주소(스킴 포함). 예: https://app.example.com
+    # 이 값과 다른 Host 로 들어온 브라우저 내비게이션은 여기로 307 리다이렉트된다
+    # (LAN 주소로 PWA 를 설치해 버리는 사고 방지 — main.py 의 canonical_redirect).
+    # 비워두면 리다이렉트하지 않는다.
+    public_origin: str = ""
 
     # ── DB ──
     # 비어 있으면 backend/data/app.db 사용
