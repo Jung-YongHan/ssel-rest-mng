@@ -185,7 +185,8 @@ export const useAppStore = defineStore('app', () => {
   }
 
   /* ── 홈 화면 설치 안내 ──────────────────────────────────────────
-     로그인한 모바일 화면에서 즉시 한 번 안내한다. Android(크롬 계열)는
+     PWA(standalone)가 아닌 모바일 브라우저로 접근하면 로그인 전이라도
+     즉시 한 번 안내한다. Android(크롬 계열)는
      네이티브 설치 창을 띄울 수 있고, iOS 는 자동 설치 API 가 없어
      공유 → '홈 화면에 추가' 단계를 안내한다. */
 
@@ -210,7 +211,7 @@ export const useAppStore = defineStore('app', () => {
     installGuideOpen.value = true
   }
 
-  /** 로그인 후 모바일 화면에서 App.vue 가 호출한다. 조건이 안 되면 조용히 무시. */
+  /** 모바일 화면이면 App.vue 가 즉시 호출한다. 조건이 안 되면 조용히 무시. */
   function maybeShowInstallGuide(): void {
     if (installGuideRequested) return
     installGuideRequested = true

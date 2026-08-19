@@ -104,11 +104,12 @@ onMounted(() => {
   void appStore.initAppUpdates()
 })
 
-// 홈 화면 설치 안내 — 로그인한 모바일 화면에서만, 세션당 한 번 즉시.
+// 홈 화면 설치 안내 — PWA(standalone)가 아닌 모바일 브라우저로 접근했으면
+// 로그인 전(로그인 화면)이라도 즉시 안내한다. standalone·스누즈 판정은 스토어가 한다.
 // 데스크톱(mdAndUp)은 홈 화면 개념이 약하므로 안내하지 않는다.
 // 다이얼로그 자체는 스토어 상태로 그려지므로, 표시 방식을 바꾸려면 이 지점만 고치면 된다.
 watch(
-  () => showChrome.value && !mdAndUp.value,
+  () => !mdAndUp.value,
   (eligible) => {
     if (eligible) appStore.maybeShowInstallGuide()
   },
