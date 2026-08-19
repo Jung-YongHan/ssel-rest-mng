@@ -41,44 +41,28 @@ const pwa = VitePWA({
     // 흰색이면 실행 순간 스플래시 톤과 어긋나 흰 플래시가 보인다.
     background_color: '#F5F6F8',
     theme_color: THEME_COLOR,
-    // 경로는 절대(/로 시작)로 쓴다. 상대 경로는 manifest 기준으로 풀리는데
-    // 일부 브라우저가 문서 URL 기준으로 잘못 푸는 사례가 있다.
+    // 진단 실험(HANDOFF §4-6): 아이콘이 정상 동작하는 대조 사이트와 선언 모양을
+    // 동일하게 맞췄다 — 2개(192/512)·상대 경로·purpose 'any maskable' 결합.
+    // (원래는 절대 경로 + purpose 분리 + 1024 포함이었다. 1024/maskable-v2 파일은
+    //  기기에 캐시된 옛 manifest 가 참조하므로 디스크에는 남긴다)
     //
     // ⚠️ 아이콘 그림을 바꿀 때는 파일 내용만 갈아끼우지 말고 -vN 을 올릴 것.
     //    iOS 는 홈 화면 아이콘을 URL 단위로 캐시해서, 같은 이름이면
     //    Safari 데이터를 지워도 예전 아이콘(또는 실패 결과)을 계속 쓴다.
-    // ⚠️ 'any' 아이콘도 반드시 불투명 풀블리드로. 알파가 있으면 iOS 가 검정으로
+    // ⚠️ 아이콘은 반드시 불투명 풀블리드로. 알파가 있으면 iOS 가 검정으로
     //    합성하거나 글자 타일로 폴백한다 (-v2 가 투명 모서리 때문에 그랬다).
-    // purpose 를 생략하면 규격상 'any' 지만, iOS 는 'any' 가 명시된 아이콘을
-    // 고르는 쪽이 확실하다. maskable 만 있는 목록은 홈 화면 아이콘 선택에서
-    // 통째로 건너뛸 수 있으므로 'any' 를 반드시 함께 둔다.
     icons: [
       {
-        src: '/pwa-192x192-v3.png',
+        src: 'pwa-192x192-v4.png',
         sizes: '192x192',
         type: 'image/png',
-        purpose: 'any',
+        purpose: 'any maskable',
       },
       {
-        src: '/pwa-512x512-v3.png',
+        src: 'pwa-512x512-v4.png',
         sizes: '512x512',
         type: 'image/png',
-        purpose: 'any',
-      },
-      {
-        // macOS Safari / iOS 26 Liquid Glass 용 대형 아이콘
-        src: '/apple-touch-icon-1024.png',
-        sizes: '1024x1024',
-        type: 'image/png',
-        purpose: 'any',
-      },
-      {
-        // maskable 은 런처가 원/스퀘어클 등 임의 모양으로 잘라낸다.
-        // 투명 모서리가 있으면 잘린 자리가 검게 보이므로 불투명 사본을 쓴다.
-        src: '/pwa-512x512-maskable-v2.png',
-        sizes: '512x512',
-        type: 'image/png',
-        purpose: 'maskable',
+        purpose: 'any maskable',
       },
     ],
   },
