@@ -27,7 +27,7 @@ const pwa = VitePWA({
   includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'apple-touch-icon-v2.png'],
   manifest: {
     name: '연구실 선결제 관리',
-    short_name: '선결제',
+    short_name: '연구실 선결제 관리',
     description: '연구실 식당 선결제 잔액을 기록하고 관리합니다.',
     lang: 'ko',
     dir: 'ltr',
