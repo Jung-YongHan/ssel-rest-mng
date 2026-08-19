@@ -110,6 +110,11 @@ docker compose up -d --build     # 엔트리포인트가 alembic upgrade head �
     사라진 청크를 가리켜 **앱이 흰 화면이 된다** (iOS 홈 화면 웹앱에서 겪었다).
     `PUBLIC_ORIGIN` 이 있으면 다른 Host 의 **화면 요청만** 정규 주소로 307 —
     API·정적 파일까지 옮기면 CORS 로 조용히 깨지고 healthcheck 도 흔들린다.
+12. **PWA 아이콘 3규칙.** 그림 변경 시 반드시 `-vN` URL 범프(iOS 는 Safari 데이터를
+    지워도 아이콘 URL 캐시를 유지) · 옛 manifest 가 참조한 아이콘 파일(v1·v2)은 영구
+    보존 · `manifest.webmanifest` 는 SW 프리캐시 금지(vite.config.ts 의
+    `ssel:manifest-no-precache`). 어기면 iOS 홈 화면 아이콘이 조용히 옛것/글자
+    타일로 남는다 (HANDOFF §4-6).
 
 ## 4. 컨벤션
 
