@@ -1,10 +1,10 @@
 /**
- * 전역 스낵바 + 서버 설정 + 앱 업데이트 스토어 (CONTRACT §5.5).
+ * 전역 스낵바 + 서버 설정 + 앱 업데이트·홈 화면 설치 안내 스토어 (CONTRACT §5.5).
  *
  * 페이지는 자체 스낵바를 만들지 말고 `useAppStore().toast(...)` 만 호출한다.
  * 실제 렌더는 `App.vue` 의 단일 `<v-snackbar>` 가 담당한다.
  */
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 
 import { healthApi } from '@/api/endpoints'
@@ -22,6 +22,53 @@ const DEFAULT_LOW_BALANCE_THRESHOLD = 30_000
  * 돈다(백그라운드 타이머는 iOS 에서 어차피 멈춘다).
  */
 const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000
+
+/* ── 홈 화면 설치 안내 (모듈 스코프) ──────────────────────────────
+   `beforeinstallprompt` 는 페이지 로드 직후, 앱 마운트보다 먼저 올 수 있다.
+   이 모듈은 App.vue 가 정적 import 하므로 마운트 전에 평가된다 — 여기서
+   잡아야 이벤트를 놓치지 않는다. (SW 등록을 앱이 직접 하는 vite.config.ts
+   `injectRegister: null` 과 같은 이유로, 설치 흐름도 이 스토어가 소유한다) */
+
+/** 안내를 닫은 뒤(방식 불문) 이 기간은 다시 묻지 않는다 */
+const INSTALL_SNOOZE_KEY = 'ssel.installSnoozedAt'
+const INSTALL_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000
+
+let deferredInstallPrompt: BeforeInstallPromptEvent | null = null
+/** 판정 시점에 이벤트가 아직 안 왔을 때 걸어 두는 콜백 — 늦게 와도 안내를 연다 */
+let onInstallPromptAvailable: (() => void) | null = null
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    // 크롬 기본 미니 인포바 대신 우리 다이얼로그로 안내한다
+    e.preventDefault()
+    deferredInstallPrompt = e
+    onInstallPromptAvailable?.()
+  })
+  window.addEventListener('appinstalled', () => {
+    // 설치가 끝났으니 안내할 자격이 사라진다
+    deferredInstallPrompt = null
+    onInstallPromptAvailable = null
+  })
+}
+
+/** 홈 화면 앱으로 실행 중이면 안내할 이유가 없다 */
+function isStandalone(): boolean {
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true
+  )
+}
+
+/** iPadOS 13+ 는 UA 를 MacIntel 로 위장하므로 터치 지점 수로 가른다 */
+function isIosBrowser(): boolean {
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  )
+}
+
+/** 인앱 브라우저에는 '홈 화면에 추가' 경로가 없다 — 안내해도 따라할 수 없다 */
+const IN_APP_UA = /KAKAOTALK|NAVER|Instagram|FBAN|FBAV|Line\//i
 
 export const useAppStore = defineStore('app', () => {
   // ── 서버 설정 (GET /api/health) ──
@@ -137,6 +184,79 @@ export const useAppStore = defineStore('app', () => {
     waiting.postMessage({ type: 'SKIP_WAITING' })
   }
 
+  /* ── 홈 화면 설치 안내 ──────────────────────────────────────────
+     로그인한 모바일 화면에서 즉시 한 번 안내한다. Android(크롬 계열)는
+     네이티브 설치 창을 띄울 수 있고, iOS 는 자동 설치 API 가 없어
+     공유 → '홈 화면에 추가' 단계를 안내한다. */
+
+  /** 설치 안내 다이얼로그 표시 여부 (App.vue 의 v-dialog 가 바인딩) */
+  const installGuideOpen = ref(false)
+  /** 어떤 안내를 그릴지 — 여는 시점에 결정한다 */
+  const installPlatform = ref<'android' | 'ios' | null>(null)
+  /** 페이지 로드(세션)당 한 번만 시도한다 */
+  let installGuideRequested = false
+
+  function installSnoozed(): boolean {
+    try {
+      const at = Number(localStorage.getItem(INSTALL_SNOOZE_KEY) ?? 0)
+      return Date.now() - at < INSTALL_SNOOZE_MS
+    } catch {
+      return true // 저장소를 못 쓰는 환경에선 매번 뜨는 쪽보다 안 뜨는 쪽이 낫다
+    }
+  }
+
+  function openInstallGuide(platform: 'android' | 'ios'): void {
+    installPlatform.value = platform
+    installGuideOpen.value = true
+  }
+
+  /** 로그인 후 모바일 화면에서 App.vue 가 호출한다. 조건이 안 되면 조용히 무시. */
+  function maybeShowInstallGuide(): void {
+    if (installGuideRequested) return
+    installGuideRequested = true
+    if (isStandalone() || installSnoozed()) return
+    if (updateReady.value) return // 업데이트 안내가 떠 있으면 이번 세션은 양보한다
+    if (deferredInstallPrompt) {
+      openInstallGuide('android')
+    } else if (isIosBrowser() && !IN_APP_UA.test(navigator.userAgent)) {
+      openInstallGuide('ios')
+    } else {
+      // 크롬 계열은 beforeinstallprompt 가 이 판정보다 늦게 올 수 있다 — 오면 그때 연다.
+      // 이벤트가 아예 없는 브라우저(삼성 인터넷·파폭·인앱)는 콜백이 불리지 않아
+      // 조용히 끝난다. 따라할 수 없는 안내를 띄우는 것보다 침묵이 낫다.
+      onInstallPromptAvailable = () => {
+        onInstallPromptAvailable = null
+        if (isStandalone() || installSnoozed() || updateReady.value) return
+        openInstallGuide('android')
+      }
+    }
+  }
+
+  /** 안드로이드: 브라우저 네이티브 설치 프롬프트를 띄운다 */
+  async function promptInstall(): Promise<void> {
+    const deferred = deferredInstallPrompt
+    installGuideOpen.value = false
+    if (!deferred) return
+    deferredInstallPrompt = null // prompt() 는 이벤트당 한 번만 허용된다
+    try {
+      await deferred.prompt()
+      await deferred.userChoice
+    } catch {
+      // 이미 소비된 이벤트 등 — 스누즈가 끝나면 다시 안내된다
+    }
+  }
+
+  // 어떤 방식으로 닫히든(나중에·스크림 탭·ESC·설치) 스누즈를 기록한다.
+  // '나중에'만 기록하면 스크림 탭으로 닫은 사용자가 매번 다시 보게 된다.
+  watch(installGuideOpen, (open) => {
+    if (open) return
+    try {
+      localStorage.setItem(INSTALL_SNOOZE_KEY, String(Date.now()))
+    } catch {
+      /* 시크릿 모드 등 저장 실패는 무시 */
+    }
+  })
+
   return {
     ocrEnabled,
     lowBalanceThreshold,
@@ -146,9 +266,13 @@ export const useAppStore = defineStore('app', () => {
     snackbarColor,
     toastKey,
     updateReady,
+    installGuideOpen,
+    installPlatform,
     loadHealth,
     toast,
     initAppUpdates,
     applyUpdate,
+    maybeShowInstallGuide,
+    promptInstall,
   }
 })

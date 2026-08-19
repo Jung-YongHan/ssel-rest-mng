@@ -15,3 +15,16 @@ declare module '*.vue' {
   const component: DefineComponent<Record<string, unknown>, Record<string, unknown>, unknown>
   export default component
 }
+
+/**
+ * 크롬 계열 전용 `beforeinstallprompt` 이벤트 — 표준이 아니라 lib.dom 에 없다.
+ * 홈 화면 설치 안내(stores/app.ts)가 쓴다.
+ */
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>
+  readonly userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
+}
+
+interface WindowEventMap {
+  beforeinstallprompt: BeforeInstallPromptEvent
+}

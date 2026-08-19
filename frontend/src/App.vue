@@ -103,6 +103,17 @@ onMounted(() => {
   // 홈 화면 PWA 에는 새로고침 수단이 없다 → 앱이 스스로 새 버전을 확인한다.
   void appStore.initAppUpdates()
 })
+
+// 홈 화면 설치 안내 — 로그인한 모바일 화면에서만, 세션당 한 번 즉시.
+// 데스크톱(mdAndUp)은 홈 화면 개념이 약하므로 안내하지 않는다.
+// 다이얼로그 자체는 스토어 상태로 그려지므로, 표시 방식을 바꾸려면 이 지점만 고치면 된다.
+watch(
+  () => showChrome.value && !mdAndUp.value,
+  (eligible) => {
+    if (eligible) appStore.maybeShowInstallGuide()
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -244,6 +255,55 @@ onMounted(() => {
         <v-btn variant="text" @click="appStore.updateReady = false">나중에</v-btn>
       </template>
     </v-snackbar>
+
+    <!-- 홈 화면 설치 안내 — 모바일 로그인 직후 한 번, 닫으면 7일 스누즈 (stores/app.ts).
+         iOS 는 자동 설치 API 가 없어 단계 안내, Android(크롬 계열)는 네이티브 설치 창 호출.
+         문구가 Safari 를 지명하지 않는 이유: iOS 16.4+ 의 Chrome 도 같은 경로로 동작한다. -->
+    <v-dialog v-model="appStore.installGuideOpen" max-width="420">
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon icon="mdi-cellphone-arrow-down" color="primary" size="20" class="me-2" />
+          <span class="section-title">홈 화면에 추가</span>
+        </v-card-title>
+        <v-card-text>
+          <div class="text-body-2">홈 화면에 추가하면 앱처럼 전체 화면으로 바로 열 수 있습니다.</div>
+          <template v-if="appStore.installPlatform === 'ios'">
+            <div class="d-flex align-center ga-2 mt-3 text-body-2">
+              <v-icon icon="mdi-export-variant" size="18" />
+              <span>브라우저의 공유 버튼을 누릅니다.</span>
+            </div>
+            <div class="d-flex align-center ga-2 mt-2 text-body-2">
+              <v-icon icon="mdi-plus-box-outline" size="18" />
+              <span>'홈 화면에 추가'를 선택합니다.</span>
+            </div>
+            <div class="d-flex align-center ga-2 mt-2 text-body-2">
+              <v-icon icon="mdi-check-circle-outline" size="18" />
+              <span>오른쪽 위 '추가'를 누르면 완료됩니다.</span>
+            </div>
+          </template>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="appStore.installGuideOpen = false">나중에</v-btn>
+          <v-btn
+            v-if="appStore.installPlatform === 'android'"
+            color="primary"
+            variant="tonal"
+            @click="appStore.promptInstall()"
+          >
+            설치
+          </v-btn>
+          <v-btn
+            v-else
+            color="primary"
+            variant="tonal"
+            @click="appStore.installGuideOpen = false"
+          >
+            확인
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-app>
 </template>
 
