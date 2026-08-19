@@ -1,0 +1,41 @@
+<!doctype html>
+<!--
+  보안 컨텍스트 진단 페이지 (일시적 — "보안 안 됨" 원인 규명 후 삭제할 것).
+  서버 쪽 TLS 는 전 항목 정상인데(TLS1.3·SHA-256·SCT·체인 완전) 실기기
+  Safari 가 "보안 안 됨"을 표시해서, 기기 자신의 판정을 화면에 띄운다.
+-->
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>보안 진단</title>
+    <style>
+      body { margin: 0; padding: 24px 16px; font-family: -apple-system, system-ui, sans-serif;
+             background: #f5f6f8; color: #1b2430; }
+      h1 { font-size: 17px; margin: 0 0 16px; }
+      dl { margin: 0; }
+      dt { font-size: 12px; color: #5a6472; margin-top: 14px; }
+      dd { margin: 2px 0 0; font-size: 16px; font-weight: 700; word-break: break-all; }
+      .ok { color: #1b7f4b; } .bad { color: #b3261e; }
+    </style>
+  </head>
+  <body>
+    <h1>보안 진단 — 이 화면을 캡처해 주세요</h1>
+    <dl id="out"></dl>
+    <script>
+      const rows = [
+        ['주소 (protocol + host)', location.protocol + '//' + location.host],
+        ['isSecureContext (핵심)', String(window.isSecureContext)],
+        ['서비스워커 사용 가능', String('serviceWorker' in navigator)],
+        ['서비스워커가 제어 중', String(!!(navigator.serviceWorker && navigator.serviceWorker.controller))],
+        ['standalone (홈 화면 실행)', String(window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true)],
+        ['User-Agent', navigator.userAgent],
+      ];
+      document.getElementById('out').innerHTML = rows.map(([k, v]) => {
+        let cls = '';
+        if (k.startsWith('isSecureContext')) cls = v === 'true' ? 'ok' : 'bad';
+        return '<dt>' + k + '</dt><dd class="' + cls + '">' + v + '</dd>';
+      }).join('');
+    </script>
+  </body>
+</html>

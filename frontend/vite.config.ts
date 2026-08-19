@@ -53,13 +53,13 @@ const pwa = VitePWA({
     //    합성하거나 글자 타일로 폴백한다 (-v2 가 투명 모서리 때문에 그랬다).
     icons: [
       {
-        src: 'pwa-192x192-v4.png',
+        src: 'pwa-192x192-v5.png',
         sizes: '192x192',
         type: 'image/png',
         purpose: 'any maskable',
       },
       {
-        src: 'pwa-512x512-v4.png',
+        src: 'pwa-512x512-v5.png',
         sizes: '512x512',
         type: 'image/png',
         purpose: 'any maskable',

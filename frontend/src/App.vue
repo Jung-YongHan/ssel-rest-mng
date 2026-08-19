@@ -265,7 +265,7 @@ watch(
       <v-card>
         <v-card-text class="text-center pt-7 pb-0">
           <span class="install-hero" aria-hidden="true">
-            <v-icon icon="mdi-currency-krw" size="30" />
+            <v-icon icon="mdi-wallet-outline" size="30" />
           </span>
           <h2 class="text-h6 font-weight-bold mt-4 mb-1">홈 화면에 추가</h2>
           <p class="text-body-2 text-medium-emphasis mb-0">
@@ -346,7 +346,7 @@ watch(
   color: rgb(var(--v-theme-on-primary, 255, 255, 255));
 }
 
-/* 설치 안내 — 실제 홈 화면 아이콘(₩·브랜드 파랑)과 같은 모양의 히어로 타일 */
+/* 설치 안내 — 실제 홈 화면 아이콘(지갑·브랜드 파랑)과 같은 모양의 히어로 타일 */
 .install-hero {
   display: inline-flex;
   align-items: center;
