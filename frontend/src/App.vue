@@ -257,39 +257,58 @@ watch(
       </template>
     </v-snackbar>
 
-    <!-- 홈 화면 설치 안내 — 모바일 로그인 직후 한 번, 닫으면 7일 스누즈 (stores/app.ts).
-         iOS 는 자동 설치 API 가 없어 단계 안내, Android(크롬 계열)는 네이티브 설치 창 호출.
+    <!-- 홈 화면 설치 안내 (stores/app.ts) — 닫으면 7일 스누즈.
+         구성: 실제 홈 화면 아이콘과 같은 모양의 히어로 타일 + OS 별 본문.
+         iOS 는 자동 설치 API 가 없어 단계 안내, Android(크롬 계열)는 네이티브 설치 창.
          문구가 Safari 를 지명하지 않는 이유: iOS 16.4+ 의 Chrome 도 같은 경로로 동작한다. -->
-    <v-dialog v-model="appStore.installGuideOpen" max-width="420">
+    <v-dialog v-model="appStore.installGuideOpen" max-width="400">
       <v-card>
-        <v-card-title class="d-flex align-center">
-          <v-icon icon="mdi-cellphone-arrow-down" color="primary" size="20" class="me-2" />
-          <span class="section-title">홈 화면에 추가</span>
-        </v-card-title>
-        <v-card-text>
-          <div class="text-body-2">홈 화면에 추가하면 앱처럼 전체 화면으로 바로 열 수 있습니다.</div>
-          <template v-if="appStore.installPlatform === 'ios'">
-            <div class="d-flex align-center ga-2 mt-3 text-body-2">
-              <v-icon icon="mdi-export-variant" size="18" />
-              <span>브라우저의 공유 버튼을 누릅니다.</span>
-            </div>
-            <div class="d-flex align-center ga-2 mt-2 text-body-2">
-              <v-icon icon="mdi-plus-box-outline" size="18" />
-              <span>'홈 화면에 추가'를 선택합니다.</span>
-            </div>
-            <div class="d-flex align-center ga-2 mt-2 text-body-2">
-              <v-icon icon="mdi-check-circle-outline" size="18" />
-              <span>오른쪽 위 '추가'를 누르면 완료됩니다.</span>
-            </div>
-          </template>
+        <v-card-text class="text-center pt-7 pb-0">
+          <span class="install-hero" aria-hidden="true">
+            <v-icon icon="mdi-currency-krw" size="30" />
+          </span>
+          <h2 class="text-h6 font-weight-bold mt-4 mb-1">홈 화면에 추가</h2>
+          <p class="text-body-2 text-medium-emphasis mb-0">
+            선결제를 홈 화면에 두면 앱처럼<br />전체 화면으로 바로 열립니다.
+          </p>
         </v-card-text>
-        <v-card-actions>
+
+        <v-card-text class="pt-5 pb-1">
+          <div v-if="appStore.installPlatform === 'ios'" class="install-steps">
+            <div class="install-step">
+              <span class="install-step-num">1</span>
+              <span class="install-step-text">
+                하단 공유
+                <v-icon icon="mdi-export-variant" size="15" class="install-step-icon" />
+                버튼을 누릅니다
+              </span>
+            </div>
+            <div class="install-step">
+              <span class="install-step-num">2</span>
+              <span class="install-step-text">
+                '홈 화면에 추가'
+                <v-icon icon="mdi-plus-box-outline" size="15" class="install-step-icon" />
+                를 선택합니다
+              </span>
+            </div>
+            <div class="install-step">
+              <span class="install-step-num">3</span>
+              <span class="install-step-text">오른쪽 위 '추가'를 누르면 완료됩니다</span>
+            </div>
+          </div>
+          <p v-else class="text-body-2 text-medium-emphasis text-center mb-0">
+            아래 설치 버튼을 누르면 설치 창이 열립니다.
+          </p>
+        </v-card-text>
+
+        <v-card-actions class="px-4 pb-4">
           <v-spacer />
           <v-btn variant="text" @click="appStore.installGuideOpen = false">나중에</v-btn>
           <v-btn
             v-if="appStore.installPlatform === 'android'"
             color="primary"
             variant="tonal"
+            class="px-5"
             @click="appStore.promptInstall()"
           >
             설치
@@ -298,6 +317,7 @@ watch(
             v-else
             color="primary"
             variant="tonal"
+            class="px-5"
             @click="appStore.installGuideOpen = false"
           >
             확인
@@ -324,6 +344,62 @@ watch(
   border-radius: 8px;
   background: rgb(var(--v-theme-primary));
   color: rgb(var(--v-theme-on-primary, 255, 255, 255));
+}
+
+/* 설치 안내 — 실제 홈 화면 아이콘(₩·브랜드 파랑)과 같은 모양의 히어로 타일 */
+.install-hero {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-primary, 255, 255, 255));
+}
+
+/* 단계 안내 — 헤어라인 구분의 리스트 카드 (DESIGN.md: 그림자 대신 테두리) */
+.install-steps {
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 12px;
+  overflow: hidden;
+  text-align: start;
+}
+
+.install-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+}
+
+.install-step + .install-step {
+  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.install-step-num {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(var(--v-theme-primary), 0.12);
+  color: rgb(var(--v-theme-primary));
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.install-step-text {
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* 문장 속 아이콘이 글자 기준선에 맞게 */
+.install-step-icon {
+  vertical-align: -2px;
+  margin-inline: 1px;
 }
 
 .brand-text {
